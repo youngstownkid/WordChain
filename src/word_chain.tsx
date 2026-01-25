@@ -11,6 +11,8 @@ import {
   RefreshCw,
   SkipForward,
   Power,
+  ChevronDown,
+  ChevronUp,
 } from "lucide-react";
 import { loadWordList, isValidWord } from "./wordlist";
 import { loadMessages, getMessage } from "./messages";
@@ -465,6 +467,7 @@ const WordGame = () => {
   const [gameMode, setGameMode] = useState<GameMode>("normal"); // Tracks current game mode
   const [consecutivePasses, setConsecutivePasses] = useState<number>(0); // Tracks consecutive passes by both players
   const [showPassWarning, setShowPassWarning] = useState<boolean>(false); // Shows warning before final pass
+  const [statsExpanded, setStatsExpanded] = useState<boolean>(false); // Stats section collapsed by default
 
   // Touch drag state
   const [touchDragTile, setTouchDragTile] = useState<{
@@ -2664,98 +2667,103 @@ const WordGame = () => {
                 </div>
               </div>
 
-              {/* Detailed Stats */}
+              {/* Detailed Stats - Collapsible */}
               {gameStarted &&
                 (playerStats.wordsPlayed > 0 ||
                   opponentStats.wordsPlayed > 0) && (
                   <div
                     className={`border-t ${
                       darkMode ? "border-gray-700" : "border-gray-300"
-                    } pt-3 mt-3`}
+                    } pt-2 mt-3`}
                   >
-                    <div className="grid grid-cols-2 gap-3 text-xs sm:text-sm">
-                      {/* Player Stats */}
-                      <div>
-                        <div className="space-y-1">
-                          <div className="flex justify-between">
-                            <span className="text-gray-400">Words:</span>
-                            <span className="font-semibold">
-                              {playerStats.wordsPlayed}
-                            </span>
-                          </div>
-                          <div className="flex justify-between">
-                            <span className="text-gray-400">Avg:</span>
-                            <span className="font-semibold">
-                              {playerStats.wordsPlayed > 0
-                                ? Math.round(
-                                    playerStats.totalScore /
-                                      playerStats.wordsPlayed,
-                                  )
-                                : 0}
-                            </span>
-                          </div>
-                          <div className="flex justify-between">
-                            <span className="text-gray-400">Best:</span>
-                            <span className="font-semibold">
-                              {playerStats.bestWordScore}
-                            </span>
-                          </div>
-                          <div className="flex justify-between">
-                            <span className="text-gray-400">Run Outs:</span>
-                            <span className="font-semibold">
-                              {playerStats.runOuts}
-                            </span>
-                          </div>
-                          <div className="flex justify-between">
-                            <span className="text-gray-400">Tiles Left:</span>
-                            <span className="font-semibold">
-                              {tileBag.length}
-                            </span>
-                          </div>
-                        </div>
-                      </div>
+                    <button
+                      onClick={() => setStatsExpanded(!statsExpanded)}
+                      className={`w-full flex items-center justify-between text-xs sm:text-sm py-1 ${
+                        darkMode ? "text-gray-400 hover:text-gray-300" : "text-gray-500 hover:text-gray-600"
+                      }`}
+                    >
+                      <span className="flex items-center gap-1">
+                        {statsExpanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+                        Stats
+                      </span>
+                      <span className="text-[0.65rem] sm:text-xs">
+                        {tileBag.length} tiles left
+                      </span>
+                    </button>
 
-                      {/* Opponent Stats */}
-                      <div>
-                        <div className="space-y-1">
-                          <div className="flex justify-between">
-                            <span className="text-gray-400">Words:</span>
-                            <span className="font-semibold">
-                              {opponentStats.wordsPlayed}
-                            </span>
+                    {statsExpanded && (
+                      <div className="grid grid-cols-2 gap-3 text-xs sm:text-sm pt-2">
+                        {/* Player Stats */}
+                        <div>
+                          <div className="space-y-1">
+                            <div className="flex justify-between">
+                              <span className="text-gray-400">Words:</span>
+                              <span className="font-semibold">
+                                {playerStats.wordsPlayed}
+                              </span>
+                            </div>
+                            <div className="flex justify-between">
+                              <span className="text-gray-400">Avg:</span>
+                              <span className="font-semibold">
+                                {playerStats.wordsPlayed > 0
+                                  ? Math.round(
+                                      playerStats.totalScore /
+                                        playerStats.wordsPlayed,
+                                    )
+                                  : 0}
+                              </span>
+                            </div>
+                            <div className="flex justify-between">
+                              <span className="text-gray-400">Best:</span>
+                              <span className="font-semibold">
+                                {playerStats.bestWordScore}
+                              </span>
+                            </div>
+                            <div className="flex justify-between">
+                              <span className="text-gray-400">Run Outs:</span>
+                              <span className="font-semibold">
+                                {playerStats.runOuts}
+                              </span>
+                            </div>
                           </div>
-                          <div className="flex justify-between">
-                            <span className="text-gray-400">Avg:</span>
-                            <span className="font-semibold">
-                              {opponentStats.wordsPlayed > 0
-                                ? Math.round(
-                                    opponentStats.totalScore /
-                                      opponentStats.wordsPlayed,
-                                  )
-                                : 0}
-                            </span>
-                          </div>
-                          <div className="flex justify-between">
-                            <span className="text-gray-400">Best:</span>
-                            <span className="font-semibold">
-                              {opponentStats.bestWordScore}
-                            </span>
-                          </div>
-                          <div className="flex justify-between">
-                            <span className="text-gray-400">Run Outs:</span>
-                            <span className="font-semibold">
-                              {opponentStats.runOuts}
-                            </span>
-                          </div>
-                          <div className="flex justify-between">
-                            <span className="text-gray-400">Tiles Left:</span>
-                            <span className="font-semibold">
-                              {tileBag.length}
-                            </span>
+                        </div>
+
+                        {/* Opponent Stats */}
+                        <div>
+                          <div className="space-y-1">
+                            <div className="flex justify-between">
+                              <span className="text-gray-400">Words:</span>
+                              <span className="font-semibold">
+                                {opponentStats.wordsPlayed}
+                              </span>
+                            </div>
+                            <div className="flex justify-between">
+                              <span className="text-gray-400">Avg:</span>
+                              <span className="font-semibold">
+                                {opponentStats.wordsPlayed > 0
+                                  ? Math.round(
+                                      opponentStats.totalScore /
+                                        opponentStats.wordsPlayed,
+                                    )
+                                  : 0}
+                              </span>
+                            </div>
+                            <div className="flex justify-between">
+                              <span className="text-gray-400">Best:</span>
+                              <span className="font-semibold">
+                                {opponentStats.bestWordScore}
+                              </span>
+                            </div>
+                            <div className="flex justify-between">
+                              <span className="text-gray-400">Run Outs:</span>
+                              <span className="font-semibold">
+                                {opponentStats.runOuts}
+                              </span>
+                            </div>
                           </div>
                         </div>
                       </div>
-                    </div>
+                    )}
                   </div>
                 )}
 
