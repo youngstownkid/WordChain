@@ -468,8 +468,10 @@ const WordGame = () => {
   const [consecutivePasses, setConsecutivePasses] = useState<number>(0); // Tracks consecutive passes by both players
   const [showPassWarning, setShowPassWarning] = useState<boolean>(false); // Shows warning before final pass
   const [statsExpanded, setStatsExpanded] = useState<boolean>(false); // Details section collapsed by default
-  const [comboStreak, setComboStreak] = useState<number>(0); // Current combo streak (0 = no combo, 2+ = active combo)
-  const [comboTiles, setComboTiles] = useState<PlacedTile[]>([]); // Tiles that can continue the combo (last opponent's played tiles)
+  const [playerComboStreak, setPlayerComboStreak] = useState<number>(0); // Player's combo streak (0 = no combo, 2+ = active)
+  const [opponentComboStreak, setOpponentComboStreak] = useState<number>(0); // Opponent's combo streak (0 = no combo, 2+ = active)
+  const [lastPlayerTiles, setLastPlayerTiles] = useState<PlacedTile[]>([]); // Last tiles played by player (for opponent to chain off)
+  const [lastOpponentTiles, setLastOpponentTiles] = useState<PlacedTile[]>([]); // Last tiles played by opponent (for player to chain off)
 
   // Touch drag state
   const [touchDragTile, setTouchDragTile] = useState<{
@@ -607,7 +609,7 @@ const WordGame = () => {
       );
 
       if (validation.valid) {
-        const scoring = calculateFullScore(board, placedTiles, comboTiles, comboStreak);
+        const scoring = calculateFullScore(board, placedTiles, lastOpponentTiles, playerComboStreak);
         const wordsText = validation.words.join(", ");
 
         let previewMessage = `Preview: ${scoring.finalScore} points (${wordsText})`;
@@ -2480,8 +2482,15 @@ const WordGame = () => {
         });
       });
 
-      // Use shared scoring function (opponent doesn't chain combos, so pass empty combo tiles)
-      const scoring = calculateFullScore(newBoard, opponentPlacedTiles, [], 0);
+      // Use shared scoring function - opponent chains off player's last tiles
+      const scoring = calculateFullScore(newBoard, opponentPlacedTiles, lastPlayerTiles, opponentComboStreak);
+
+      // Update opponent's combo streak
+      setOpponentComboStreak(scoring.newComboStreak);
+      // If opponent didn't chain, reset player's streak
+      if (!scoring.isCombo) {
+        setPlayerComboStreak(0);
+      }
 
       setOpponentScore(opponentScore + scoring.finalScore);
       setOpponentStats({
@@ -2513,15 +2522,18 @@ const WordGame = () => {
       setCurrentPlayer("player");
       setLastPlayedTiles(opponentPlacedTiles);
 
-      // Set combo tiles to ALL tiles used in the formed words (from scoring result)
+      // Set all tiles used in the formed words for player to potentially chain off
       const allOpponentTilesUsed = scoring.allWordPositions.map(pos => ({
         row: pos.row,
         col: pos.col,
         letter: newBoard[pos.row][pos.col]?.letter as Letter,
       }));
-      setComboTiles(allOpponentTilesUsed);
+      setLastOpponentTiles(allOpponentTilesUsed);
 
       let opponentMessage = getMessage("OpponentScoredFormat", { score: scoring.finalScore.toString() });
+      if (scoring.isCombo) {
+        opponentMessage += ` 🔥 ${scoring.comboMultiplier}x COMBO!`;
+      }
       if (scoring.isRunOut) {
         opponentMessage += " 🎉 RUN OUT! (+50)";
       }
@@ -2538,10 +2550,16 @@ const WordGame = () => {
       return;
     }
 
-    // Use shared scoring function
-    const scoring = calculateFullScore(board, placedTiles, comboTiles, comboStreak);
+    // Use shared scoring function - player chains off opponent's last tiles
+    const scoring = calculateFullScore(board, placedTiles, lastOpponentTiles, playerComboStreak);
 
-    setComboStreak(scoring.newComboStreak);
+    // Update player's combo streak
+    setPlayerComboStreak(scoring.newComboStreak);
+    // If player didn't chain, reset opponent's streak opportunity
+    if (!scoring.isCombo) {
+      setOpponentComboStreak(0);
+    }
+
     setPlayerScore(playerScore + scoring.finalScore);
     setPlayerStats({
       wordsPlayed: playerStats.wordsPlayed + 1,
@@ -2573,13 +2591,13 @@ const WordGame = () => {
     setPlayerRack([...playerRack, ...newTiles]);
     setTileBag(remainingBag);
     setLastPlayedTiles(placedTiles);
-    // Set all tiles used in the formed words as combo tiles for the next turn (from scoring result)
+    // Set all tiles used in the formed words for opponent to potentially chain off
     const allTilesUsed = scoring.allWordPositions.map(pos => ({
       row: pos.row,
       col: pos.col,
       letter: (board[pos.row][pos.col]?.letter || placedTiles.find(t => t.row === pos.row && t.col === pos.col)?.letter) as Letter,
     }));
-    setComboTiles(allTilesUsed);
+    setLastPlayerTiles(allTilesUsed);
     setPlacedTiles([]);
     setInvalidTiles([]);
     setIsFirstMove(false);
@@ -2838,8 +2856,10 @@ const WordGame = () => {
     }
     setTimeRemaining(0);
     setMessage("");
-    setComboStreak(0);
-    setComboTiles([]);
+    setPlayerComboStreak(0);
+    setOpponentComboStreak(0);
+    setLastPlayerTiles([]);
+    setLastOpponentTiles([]);
   };
 
   const bgColor = darkMode ? "bg-gray-900" : "bg-gray-100";
@@ -2904,18 +2924,16 @@ const WordGame = () => {
                   <div className="text-xl sm:text-2xl font-bold">
                     {playerScore}
                   </div>
+                  {/* Player Combo Streak */}
+                  {playerComboStreak >= 2 && (
+                    <div className="text-orange-500 font-bold text-sm animate-pulse">
+                      🔥 {playerComboStreak}x
+                    </div>
+                  )}
                 </div>
-                {/* Combo Streak Display */}
-                {comboStreak >= 2 && (
-                  <div className="flex-1 text-center">
-                    <div className="text-orange-500 font-bold text-lg sm:text-xl animate-pulse">
-                      🔥 {comboStreak}x
-                    </div>
-                    <div className="text-[0.6rem] sm:text-xs text-orange-400">
-                      COMBO
-                    </div>
-                  </div>
-                )}
+                <div className="flex-1 text-center text-gray-500 text-sm">
+                  vs
+                </div>
                 <div className="flex-1 text-right">
                   <div className="text-xs sm:text-sm text-gray-400">
                     Opponent
@@ -2923,6 +2941,12 @@ const WordGame = () => {
                   <div className="text-xl sm:text-2xl font-bold">
                     {opponentScore}
                   </div>
+                  {/* Opponent Combo Streak */}
+                  {opponentComboStreak >= 2 && (
+                    <div className="text-orange-500 font-bold text-sm animate-pulse">
+                      🔥 {opponentComboStreak}x
+                    </div>
+                  )}
                 </div>
               </div>
 
@@ -3618,9 +3642,10 @@ const WordGame = () => {
                       const isLastPlayed = lastPlayedTiles.some(
                         (t) => t.row === rowIndex && t.col === colIndex,
                       );
-                      const isComboTile = comboTiles.some(
-                        (t) => t.row === rowIndex && t.col === colIndex,
-                      );
+                      // Show combo tiles based on whose turn it is
+                      const isComboTile = currentPlayer === "player"
+                        ? lastOpponentTiles.some((t) => t.row === rowIndex && t.col === colIndex)
+                        : lastPlayerTiles.some((t) => t.row === rowIndex && t.col === colIndex);
 
                       // Generate random animation parameters for each tile
                       const animationDelay =
