@@ -609,7 +609,16 @@ const WordGame = () => {
       );
 
       if (validation.valid) {
-        const scoring = calculateFullScore(board, placedTiles, lastOpponentTiles, playerComboStreak);
+        // Create a merged board with placed tiles for scoring calculation
+        const boardWithPlacedTiles = board.map((row) => [...row]);
+        placedTiles.forEach((tile) => {
+          boardWithPlacedTiles[tile.row][tile.col] = {
+            letter: tile.letter,
+            score: LETTER_SCORES[tile.letter] || 0,
+          };
+        });
+
+        const scoring = calculateFullScore(boardWithPlacedTiles, placedTiles, lastOpponentTiles, playerComboStreak);
         const wordsText = validation.words.join(", ");
 
         let previewMessage = `Preview: ${scoring.finalScore} points (${wordsText})`;
@@ -2549,8 +2558,17 @@ const WordGame = () => {
       return;
     }
 
+    // Create a merged board with placed tiles for scoring calculation
+    const boardWithPlacedTiles = board.map((row) => [...row]);
+    placedTiles.forEach((tile) => {
+      boardWithPlacedTiles[tile.row][tile.col] = {
+        letter: tile.letter,
+        score: LETTER_SCORES[tile.letter] || 0,
+      };
+    });
+
     // Use shared scoring function - player chains off opponent's last tiles
-    const scoring = calculateFullScore(board, placedTiles, lastOpponentTiles, playerComboStreak);
+    const scoring = calculateFullScore(boardWithPlacedTiles, placedTiles, lastOpponentTiles, playerComboStreak);
 
     // Update player's combo streak
     setPlayerComboStreak(scoring.newComboStreak);
@@ -2593,7 +2611,7 @@ const WordGame = () => {
     const allTilesUsed = scoring.allWordPositions.map(pos => ({
       row: pos.row,
       col: pos.col,
-      letter: (board[pos.row][pos.col]?.letter || placedTiles.find(t => t.row === pos.row && t.col === pos.col)?.letter) as Letter,
+      letter: boardWithPlacedTiles[pos.row][pos.col]?.letter as Letter,
     }));
     setLastPlayedTiles(allTilesUsed); // For board display
     setLastPlayerTiles(allTilesUsed); // For opponent's combo detection
@@ -2873,6 +2891,9 @@ const WordGame = () => {
           <h1 className="text-xl sm:text-2xl font-bold flex items-center gap-2">
             <span className="text-2xl sm:text-3xl">🐂</span>
             Word Chain
+            <span className="text-[0.5rem] sm:text-xs text-gray-500 font-normal self-end mb-0.5">
+              v26.01.25.18.13
+            </span>
           </h1>
           <div className="flex items-center gap-2">
             {!gameStarted ? (
@@ -2920,15 +2941,17 @@ const WordGame = () => {
               <div className="flex justify-between items-center mb-3">
                 <div className="flex-1">
                   <div className="text-xs sm:text-sm text-gray-400">You</div>
-                  <div className="text-xl sm:text-2xl font-bold">
-                    {playerScore}
+                  <div className="flex items-center gap-2">
+                    <span className="text-xl sm:text-2xl font-bold">
+                      {playerScore}
+                    </span>
+                    {/* Player Combo Streak */}
+                    {playerComboStreak >= 2 && (
+                      <span className="text-orange-500 font-bold text-sm animate-pulse">
+                        🔥{playerComboStreak}x
+                      </span>
+                    )}
                   </div>
-                  {/* Player Combo Streak */}
-                  {playerComboStreak >= 2 && (
-                    <div className="text-orange-500 font-bold text-sm animate-pulse">
-                      🔥 {playerComboStreak}x
-                    </div>
-                  )}
                 </div>
                 <div className="flex-1 text-center text-gray-500 text-sm">
                   vs
@@ -2937,15 +2960,17 @@ const WordGame = () => {
                   <div className="text-xs sm:text-sm text-gray-400">
                     Opponent
                   </div>
-                  <div className="text-xl sm:text-2xl font-bold">
-                    {opponentScore}
+                  <div className="flex items-center justify-end gap-2">
+                    {/* Opponent Combo Streak */}
+                    {opponentComboStreak >= 2 && (
+                      <span className="text-orange-500 font-bold text-sm animate-pulse">
+                        🔥{opponentComboStreak}x
+                      </span>
+                    )}
+                    <span className="text-xl sm:text-2xl font-bold">
+                      {opponentScore}
+                    </span>
                   </div>
-                  {/* Opponent Combo Streak */}
-                  {opponentComboStreak >= 2 && (
-                    <div className="text-orange-500 font-bold text-sm animate-pulse">
-                      🔥 {opponentComboStreak}x
-                    </div>
-                  )}
                 </div>
               </div>
 
