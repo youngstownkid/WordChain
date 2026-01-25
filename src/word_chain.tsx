@@ -467,8 +467,7 @@ const WordGame = () => {
   const [gameMode, setGameMode] = useState<GameMode>("normal"); // Tracks current game mode
   const [consecutivePasses, setConsecutivePasses] = useState<number>(0); // Tracks consecutive passes by both players
   const [showPassWarning, setShowPassWarning] = useState<boolean>(false); // Shows warning before final pass
-  const [statsExpanded, setStatsExpanded] = useState<boolean>(false); // Stats section collapsed by default
-  const [optionsExpanded, setOptionsExpanded] = useState<boolean>(false); // Game options collapsed by default
+  const [statsExpanded, setStatsExpanded] = useState<boolean>(false); // Details section collapsed by default
 
   // Touch drag state
   const [touchDragTile, setTouchDragTile] = useState<{
@@ -2696,32 +2695,91 @@ const WordGame = () => {
                 </div>
               </div>
 
-              {/* Detailed Stats - Collapsible */}
-              {gameStarted && (
-                  <div
-                    className={`border-t ${
-                      darkMode ? "border-gray-700" : "border-gray-300"
-                    } pt-2 mt-3`}
-                  >
-                    <button
-                      onClick={() => setStatsExpanded(!statsExpanded)}
-                      className={`w-full flex items-center justify-between text-xs sm:text-sm py-1 ${
-                        darkMode ? "text-gray-400 hover:text-gray-300" : "text-gray-500 hover:text-gray-600"
-                      }`}
-                    >
-                      <span className="flex items-center gap-1">
-                        {statsExpanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
-                        Stats
-                      </span>
-                      <span className="text-[0.65rem] sm:text-xs">
-                        {tileBag.length} tiles left
-                      </span>
-                    </button>
+              {/* Details - Collapsible (Stats + Game Options) */}
+              <div
+                className={`border-t ${
+                  darkMode ? "border-gray-700" : "border-gray-300"
+                } pt-2 mt-3`}
+              >
+                <button
+                  onClick={() => setStatsExpanded(!statsExpanded)}
+                  className={`w-full flex items-center justify-between text-xs sm:text-sm py-1 ${
+                    darkMode ? "text-gray-400 hover:text-gray-300" : "text-gray-500 hover:text-gray-600"
+                  }`}
+                >
+                  <span className="flex items-center gap-1">
+                    {statsExpanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+                    Details
+                  </span>
+                  <span className="text-[0.65rem] sm:text-xs">
+                    {gameStarted ? `${tileBag.length} tiles` : difficulty.charAt(0).toUpperCase() + difficulty.slice(1)}
+                    {timerDuration > 0 ? ` / ${timerDuration >= 60 ? `${timerDuration / 60}m` : `${timerDuration}s`}` : ''}
+                  </span>
+                </button>
 
-                    {statsExpanded && (
-                      <div className="grid grid-cols-2 gap-3 text-xs sm:text-sm pt-2">
+                {statsExpanded && (
+                  <div className="pt-2 space-y-3">
+                    {/* Game Options */}
+                    <div className="flex gap-2">
+                      <div className="flex-1">
+                        <label className="block text-xs sm:text-sm mb-1 text-gray-400">
+                          Difficulty
+                        </label>
+                        <select
+                          value={difficulty}
+                          onChange={(e) =>
+                            setDifficulty(
+                              e.target.value as
+                                | "beginner"
+                                | "intermediate"
+                                | "advanced"
+                                | "expert",
+                            )
+                          }
+                          className={`w-full p-2 rounded text-xs sm:text-sm ${
+                            darkMode ? "bg-gray-700" : "bg-gray-200"
+                          }`}
+                          disabled={gameStarted}
+                          title="Select difficulty level"
+                        >
+                          <option value="beginner">Beginner</option>
+                          <option value="intermediate">Intermediate</option>
+                          <option value="advanced">Advanced</option>
+                          <option value="expert">Expert</option>
+                        </select>
+                      </div>
+                      <div className="flex-1">
+                        <label className="block text-xs sm:text-sm mb-1 text-gray-400">
+                          Turn Timer
+                        </label>
+                        <select
+                          value={timerDuration}
+                          onChange={(e) => setTimerDuration(Number(e.target.value))}
+                          className={`w-full p-2 rounded text-xs sm:text-sm ${
+                            darkMode ? "bg-gray-700" : "bg-gray-200"
+                          }`}
+                          disabled={gameStarted}
+                          title="Select turn timer duration"
+                        >
+                          <option value={0}>None</option>
+                          <option value={30}>30 Sec</option>
+                          <option value={45}>45 Sec</option>
+                          <option value={60}>1 Min</option>
+                          <option value={90}>1.5 Min</option>
+                          <option value={120}>2 Min</option>
+                          <option value={180}>3 Min</option>
+                          <option value={240}>4 Min</option>
+                          <option value={300}>5 Min</option>
+                        </select>
+                      </div>
+                    </div>
+
+                    {/* Stats - only show when game started */}
+                    {gameStarted && (
+                      <div className="grid grid-cols-2 gap-3 text-xs sm:text-sm">
                         {/* Player Stats */}
                         <div>
+                          <div className="text-gray-400 mb-1 font-semibold">You</div>
                           <div className="space-y-1">
                             <div className="flex justify-between">
                               <span className="text-gray-400">Words:</span>
@@ -2757,6 +2815,7 @@ const WordGame = () => {
 
                         {/* Opponent Stats */}
                         <div>
+                          <div className="text-gray-400 mb-1 font-semibold">Opponent</div>
                           <div className="space-y-1">
                             <div className="flex justify-between">
                               <span className="text-gray-400">Words:</span>
@@ -2791,84 +2850,6 @@ const WordGame = () => {
                         </div>
                       </div>
                     )}
-                  </div>
-                )}
-
-              {/* Game Options - Collapsible */}
-              <div
-                className={`border-t ${
-                  darkMode ? "border-gray-700" : "border-gray-300"
-                } pt-2 mt-3`}
-              >
-                <button
-                  onClick={() => setOptionsExpanded(!optionsExpanded)}
-                  className={`w-full flex items-center justify-between text-xs sm:text-sm py-1 ${
-                    darkMode ? "text-gray-400 hover:text-gray-300" : "text-gray-500 hover:text-gray-600"
-                  }`}
-                >
-                  <span className="flex items-center gap-1">
-                    {optionsExpanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
-                    Game Options
-                  </span>
-                  <span className="text-[0.65rem] sm:text-xs">
-                    {difficulty.charAt(0).toUpperCase() + difficulty.slice(1)}
-                    {timerDuration > 0 ? ` / ${timerDuration >= 60 ? `${timerDuration / 60}m` : `${timerDuration}s`}` : ''}
-                  </span>
-                </button>
-
-                {optionsExpanded && (
-                  <div className="flex gap-2 pt-2">
-                    <div className="flex-1">
-                      <label className="block text-xs sm:text-sm mb-1 text-gray-400">
-                        Difficulty
-                      </label>
-                      <select
-                        value={difficulty}
-                        onChange={(e) =>
-                          setDifficulty(
-                            e.target.value as
-                              | "beginner"
-                              | "intermediate"
-                              | "advanced"
-                              | "expert",
-                          )
-                        }
-                        className={`w-full p-2 rounded text-xs sm:text-sm ${
-                          darkMode ? "bg-gray-700" : "bg-gray-200"
-                        }`}
-                        disabled={gameStarted}
-                        title="Select difficulty level"
-                      >
-                        <option value="beginner">Beginner</option>
-                        <option value="intermediate">Intermediate</option>
-                        <option value="advanced">Advanced</option>
-                        <option value="expert">Expert</option>
-                      </select>
-                    </div>
-                    <div className="flex-1">
-                      <label className="block text-xs sm:text-sm mb-1 text-gray-400">
-                        Turn Timer
-                      </label>
-                      <select
-                        value={timerDuration}
-                        onChange={(e) => setTimerDuration(Number(e.target.value))}
-                        className={`w-full p-2 rounded text-xs sm:text-sm ${
-                          darkMode ? "bg-gray-700" : "bg-gray-200"
-                        }`}
-                        disabled={gameStarted}
-                        title="Select turn timer duration"
-                      >
-                        <option value={0}>None</option>
-                        <option value={30}>30 Sec</option>
-                        <option value={45}>45 Sec</option>
-                        <option value={60}>1 Min</option>
-                        <option value={90}>1.5 Min</option>
-                        <option value={120}>2 Min</option>
-                        <option value={180}>3 Min</option>
-                        <option value={240}>4 Min</option>
-                        <option value={300}>5 Min</option>
-                      </select>
-                    </div>
                   </div>
                 )}
               </div>
