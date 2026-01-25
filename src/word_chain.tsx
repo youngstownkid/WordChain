@@ -2636,14 +2636,42 @@ const WordGame = () => {
             <span className="text-2xl sm:text-3xl">🐂</span>
             Word Chain
           </h1>
-          <button
-            onClick={() => setDarkMode(!darkMode)}
-            className={`p-2 rounded-lg ${
-              darkMode ? "bg-gray-700" : "bg-gray-300"
-            }`}
-          >
-            {darkMode ? <Sun size={20} /> : <Moon size={20} />}
-          </button>
+          <div className="flex items-center gap-2">
+            {!gameStarted ? (
+              <button
+                onClick={initializeGame}
+                className={`p-2 rounded-lg ${
+                  darkMode
+                    ? "bg-blue-700 hover:bg-blue-600"
+                    : "bg-blue-500 hover:bg-blue-600"
+                }`}
+                title="Start Game"
+              >
+                <RotateCcw size={20} />
+              </button>
+            ) : (
+              <button
+                onClick={quitGame}
+                className={`p-2 rounded-lg ${
+                  darkMode
+                    ? "bg-red-700 hover:bg-red-600"
+                    : "bg-red-500 hover:bg-red-600"
+                }`}
+                title="Quit Game"
+              >
+                <Power size={20} />
+              </button>
+            )}
+            <button
+              onClick={() => setDarkMode(!darkMode)}
+              className={`p-2 rounded-lg ${
+                darkMode ? "bg-gray-700" : "bg-gray-300"
+              }`}
+              title={darkMode ? "Light Mode" : "Dark Mode"}
+            >
+              {darkMode ? <Sun size={20} /> : <Moon size={20} />}
+            </button>
+          </div>
         </div>
 
         <div className="flex flex-col lg:flex-row gap-4">
@@ -2847,61 +2875,32 @@ const WordGame = () => {
                 )}
               </div>
 
-              {/* Start/Quit Game Button and Time Remaining */}
-              <div className="flex gap-2 mt-3">
-                <div className="flex-1">
-                  {!gameStarted ? (
-                    <button
-                      onClick={initializeGame}
-                      className={`w-full py-2 rounded-lg font-semibold flex items-center justify-center gap-2 text-sm ${
-                        darkMode
-                          ? "bg-blue-700 hover:bg-blue-600"
-                          : "bg-blue-500 hover:bg-blue-600 text-white"
-                      }`}
-                    >
-                      <RotateCcw size={16} />
-                      Start Game
-                    </button>
-                  ) : (
-                    <button
-                      onClick={quitGame}
-                      className={`w-full py-2 rounded-lg font-semibold flex items-center justify-center gap-2 text-sm ${
-                        darkMode
-                          ? "bg-red-700 hover:bg-red-600"
-                          : "bg-red-500 hover:bg-red-600 text-white"
-                      }`}
-                    >
-                      <Power size={16} />
-                      Quit Game
-                    </button>
-                  )}
-                </div>
-                {timerDuration > 0 &&
-                gameStarted &&
-                currentPlayer === "player" &&
-                !gameEnded && (
+              {/* Time Remaining */}
+              {timerDuration > 0 &&
+              gameStarted &&
+              currentPlayer === "player" &&
+              !gameEnded && (
+                <div
+                  className={`mt-3 p-2 rounded flex items-center justify-center ${
+                    timeRemaining <= 10
+                      ? darkMode
+                        ? "bg-red-900"
+                        : "bg-red-200"
+                      : darkMode
+                        ? "bg-gray-700"
+                        : "bg-gray-300"
+                  }`}
+                >
                   <div
-                    className={`flex-1 p-2 rounded flex items-center justify-center ${
-                      timeRemaining <= 10
-                        ? darkMode
-                          ? "bg-red-900"
-                          : "bg-red-200"
-                        : darkMode
-                          ? "bg-gray-700"
-                          : "bg-gray-300"
+                    className={`text-sm sm:text-base font-bold ${
+                      timeRemaining <= 10 ? "text-red-500" : ""
                     }`}
                   >
-                    <div
-                      className={`text-sm sm:text-base font-bold ${
-                        timeRemaining <= 10 ? "text-red-500" : ""
-                      }`}
-                    >
-                      {Math.floor(timeRemaining / 60)}:
-                      {(timeRemaining % 60).toString().padStart(2, "0")}
-                    </div>
+                    Time: {Math.floor(timeRemaining / 60)}:
+                    {(timeRemaining % 60).toString().padStart(2, "0")}
                   </div>
-                )}
-              </div>
+                </div>
+              )}
             </div>
 
             {/* Message Box */}
