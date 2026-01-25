@@ -58,3 +58,12 @@ html, body {
 [draggable="true"] {
   -webkit-user-drag: element;
 }
+
+/* Floating drag tile for touch support */
+.floating-drag-tile {
+  position: fixed;
+  pointer-events: none;
+  z-index: 100;
+  left: var(--drag-x);
+  top: var(--drag-y);
+}

@@ -3420,7 +3420,7 @@ const WordGame = () => {
                           {...(showCelebration && cell
                             ? {
                                 style: {
-                                  "--animation-delay": animationDelay,
+                                  animationDelay,
                                   "--float-x-1": `${floatX1}px`,
                                   "--float-y-1": `${floatY1}px`,
                                   "--float-x-2": `${floatX2}px`,
@@ -3564,14 +3564,15 @@ const WordGame = () => {
           </div>
         )}
 
-        {/* Floating touch drag tile */}
+        {/* Floating touch drag tile - style needed for dynamic positioning */}
         {touchDragPosition && (touchDragTile || touchMultiTiles) && (
+          // eslint-disable-next-line react/forbid-dom-props
           <div
-            className="fixed pointer-events-none z-[100]"
+            className="floating-drag-tile"
             style={{
-              left: touchDragPosition.x - 24,
-              top: touchDragPosition.y - 24,
-            }}
+              '--drag-x': `${touchDragPosition.x - 24}px`,
+              '--drag-y': `${touchDragPosition.y - 24}px`,
+            } as React.CSSProperties}
           >
             {touchMultiTiles ? (
               <div className={`flex ${orientation === 'vertical' ? 'flex-col' : 'flex-row'} gap-1 opacity-90`}>
