@@ -1,0 +1,40 @@
+# Scrabble Game Messages Configuration
+# Format: MessageKey = Message Text
+# Lines starting with # are comments
+
+# Startup Messages
+WordListLoaded = Word list loaded! Drag tiles to the board to start.
+YourTurn = It's your turn.
+OpponentGoesFirst = Opponent goes first!
+
+# Multi-select / Group Mode Messages
+GroupModeActivated = Group mode - Click to select/deselect tiles.
+SelectionCleared = Selection cleared
+GroupModeExited = Group mode exited
+
+# Tile Management Messages
+TilesRecalled = Tiles recalled
+TilesRandomized = Tiles randomized
+SelectTilesToSwap = Select tiles to swap, then click Swap again to confirm
+CannotSwapWithTilesOnBoard = Cannot swap tiles with tiles on the board. Recall them first.
+NoTilesLeftToSwap = No tiles left in the bag to swap!
+TilesSwappedFormat = Swapped {count} tiles. Opponent's turn.
+
+# Validation Messages
+PlaceTilesFirst = You must first tiles on the board.
+TilesMustBeInLine = Tiles must be in a straight line.
+FirstWordMustTouchCenter = First word must touch the center square.
+WordCannotHaveGaps = Tiles must be adjacent to play a word.
+MustFormWordMinLength = Must form a word of at least 2 letters.
+InvalidWordFormat = Invalid word: {word}
+NotEnoughSpace = Not enough space for all tiles.
+
+# Score Messages
+ScoreFormat = +{score} points! Word: {words}
+OpponentScoredFormat = Opponent scored {score} points.
+
+# Turn Messages
+OpponentPassed = Opponent passes
+
+# Timer Messages
+TimesUpMustSwapOrPass = You must swap tiles, or pass your turn.
