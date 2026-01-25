@@ -468,6 +468,7 @@ const WordGame = () => {
   const [consecutivePasses, setConsecutivePasses] = useState<number>(0); // Tracks consecutive passes by both players
   const [showPassWarning, setShowPassWarning] = useState<boolean>(false); // Shows warning before final pass
   const [statsExpanded, setStatsExpanded] = useState<boolean>(false); // Stats section collapsed by default
+  const [optionsExpanded, setOptionsExpanded] = useState<boolean>(false); // Game options collapsed by default
 
   // Touch drag state
   const [touchDragTile, setTouchDragTile] = useState<{
@@ -2767,40 +2768,92 @@ const WordGame = () => {
                   </div>
                 )}
 
-              {/* Difficulty and Start/Quit Game Button */}
-              <div className="flex gap-2 mb-3">
+              {/* Game Options - Collapsible */}
+              <div
+                className={`border-t ${
+                  darkMode ? "border-gray-700" : "border-gray-300"
+                } pt-2 mt-3`}
+              >
+                <button
+                  onClick={() => setOptionsExpanded(!optionsExpanded)}
+                  className={`w-full flex items-center justify-between text-xs sm:text-sm py-1 ${
+                    darkMode ? "text-gray-400 hover:text-gray-300" : "text-gray-500 hover:text-gray-600"
+                  }`}
+                >
+                  <span className="flex items-center gap-1">
+                    {optionsExpanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+                    Game Options
+                  </span>
+                  <span className="text-[0.65rem] sm:text-xs">
+                    {difficulty.charAt(0).toUpperCase() + difficulty.slice(1)}
+                    {timerDuration > 0 ? ` / ${timerDuration >= 60 ? `${timerDuration / 60}m` : `${timerDuration}s`}` : ''}
+                  </span>
+                </button>
+
+                {optionsExpanded && (
+                  <div className="flex gap-2 pt-2">
+                    <div className="flex-1">
+                      <label className="block text-xs sm:text-sm mb-1 text-gray-400">
+                        Difficulty
+                      </label>
+                      <select
+                        value={difficulty}
+                        onChange={(e) =>
+                          setDifficulty(
+                            e.target.value as
+                              | "beginner"
+                              | "intermediate"
+                              | "advanced"
+                              | "expert",
+                          )
+                        }
+                        className={`w-full p-2 rounded text-xs sm:text-sm ${
+                          darkMode ? "bg-gray-700" : "bg-gray-200"
+                        }`}
+                        disabled={gameStarted}
+                        title="Select difficulty level"
+                      >
+                        <option value="beginner">Beginner</option>
+                        <option value="intermediate">Intermediate</option>
+                        <option value="advanced">Advanced</option>
+                        <option value="expert">Expert</option>
+                      </select>
+                    </div>
+                    <div className="flex-1">
+                      <label className="block text-xs sm:text-sm mb-1 text-gray-400">
+                        Turn Timer
+                      </label>
+                      <select
+                        value={timerDuration}
+                        onChange={(e) => setTimerDuration(Number(e.target.value))}
+                        className={`w-full p-2 rounded text-xs sm:text-sm ${
+                          darkMode ? "bg-gray-700" : "bg-gray-200"
+                        }`}
+                        disabled={gameStarted}
+                        title="Select turn timer duration"
+                      >
+                        <option value={0}>None</option>
+                        <option value={30}>30 Sec</option>
+                        <option value={45}>45 Sec</option>
+                        <option value={60}>1 Min</option>
+                        <option value={90}>1.5 Min</option>
+                        <option value={120}>2 Min</option>
+                        <option value={180}>3 Min</option>
+                        <option value={240}>4 Min</option>
+                        <option value={300}>5 Min</option>
+                      </select>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Start/Quit Game Button and Time Remaining */}
+              <div className="flex gap-2 mt-3">
                 <div className="flex-1">
-                  <label className="block text-xs sm:text-sm mb-1 text-gray-400">
-                    Difficulty
-                  </label>
-                  <select
-                    value={difficulty}
-                    onChange={(e) =>
-                      setDifficulty(
-                        e.target.value as
-                          | "beginner"
-                          | "intermediate"
-                          | "advanced"
-                          | "expert",
-                      )
-                    }
-                    className={`w-full p-2 rounded text-xs sm:text-sm ${
-                      darkMode ? "bg-gray-700" : "bg-gray-200"
-                    }`}
-                    disabled={gameStarted}
-                    title="Select difficulty level"
-                  >
-                    <option value="beginner">Beginner</option>
-                    <option value="intermediate">Intermediate</option>
-                    <option value="advanced">Advanced</option>
-                    <option value="expert">Expert</option>
-                  </select>
-                </div>
-                <div className="flex-1 flex flex-col justify-end">
                   {!gameStarted ? (
                     <button
                       onClick={initializeGame}
-                      className={`py-2 rounded-lg font-semibold flex items-center justify-center gap-2 text-sm ${
+                      className={`w-full py-2 rounded-lg font-semibold flex items-center justify-center gap-2 text-sm ${
                         darkMode
                           ? "bg-blue-700 hover:bg-blue-600"
                           : "bg-blue-500 hover:bg-blue-600 text-white"
@@ -2812,7 +2865,7 @@ const WordGame = () => {
                   ) : (
                     <button
                       onClick={quitGame}
-                      className={`py-2 rounded-lg font-semibold flex items-center justify-center gap-2 text-sm ${
+                      className={`w-full py-2 rounded-lg font-semibold flex items-center justify-center gap-2 text-sm ${
                         darkMode
                           ? "bg-red-700 hover:bg-red-600"
                           : "bg-red-500 hover:bg-red-600 text-white"
@@ -2823,71 +2876,31 @@ const WordGame = () => {
                     </button>
                   )}
                 </div>
-              </div>
-
-              {/* Turn Timer and Time Remaining */}
-              <div className="flex gap-2">
-                <div className="flex-1">
-                  <label className="block text-xs sm:text-sm mb-1 text-gray-400">
-                    Turn Timer
-                  </label>
-                  <select
-                    value={timerDuration}
-                    onChange={(e) => setTimerDuration(Number(e.target.value))}
-                    className={`w-full p-2 rounded text-xs sm:text-sm ${
-                      darkMode ? "bg-gray-700" : "bg-gray-200"
+                {timerDuration > 0 &&
+                gameStarted &&
+                currentPlayer === "player" &&
+                !gameEnded && (
+                  <div
+                    className={`flex-1 p-2 rounded flex items-center justify-center ${
+                      timeRemaining <= 10
+                        ? darkMode
+                          ? "bg-red-900"
+                          : "bg-red-200"
+                        : darkMode
+                          ? "bg-gray-700"
+                          : "bg-gray-300"
                     }`}
-                    disabled={gameStarted}
-                    title="Select turn timer duration"
                   >
-                    <option value={0}>None</option>
-                    <option value={30}>30 Sec</option>
-                    <option value={45}>45 Sec</option>
-                    <option value={60}>1 Min</option>
-                    <option value={90}>1.5 Min</option>
-                    <option value={120}>2 Min</option>
-                    <option value={180}>3 Min</option>
-                    <option value={240}>4 Min</option>
-                    <option value={300}>5 Min</option>
-                  </select>
-                </div>
-                <div className="flex-1">
-                  <label className="block text-xs sm:text-sm mb-1 text-gray-400">
-                    {timerDuration > 0 &&
-                    gameStarted &&
-                    currentPlayer === "player" &&
-                    !gameEnded
-                      ? "Time Remaining"
-                      : "\u00A0"}
-                  </label>
-                  {timerDuration > 0 &&
-                  gameStarted &&
-                  currentPlayer === "player" &&
-                  !gameEnded ? (
                     <div
-                      className={`p-2 rounded text-center ${
-                        timeRemaining <= 10
-                          ? darkMode
-                            ? "bg-red-900"
-                            : "bg-red-200"
-                          : darkMode
-                            ? "bg-gray-700"
-                            : "bg-gray-300"
+                      className={`text-sm sm:text-base font-bold ${
+                        timeRemaining <= 10 ? "text-red-500" : ""
                       }`}
                     >
-                      <div
-                        className={`text-xs sm:text-sm font-bold ${
-                          timeRemaining <= 10 ? "text-red-500" : ""
-                        }`}
-                      >
-                        {Math.floor(timeRemaining / 60)}:
-                        {(timeRemaining % 60).toString().padStart(2, "0")}
-                      </div>
+                      {Math.floor(timeRemaining / 60)}:
+                      {(timeRemaining % 60).toString().padStart(2, "0")}
                     </div>
-                  ) : (
-                    <div className="h-10"></div>
-                  )}
-                </div>
+                  </div>
+                )}
               </div>
             </div>
 
