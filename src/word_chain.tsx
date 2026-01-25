@@ -2697,9 +2697,7 @@ const WordGame = () => {
               </div>
 
               {/* Detailed Stats - Collapsible */}
-              {gameStarted &&
-                (playerStats.wordsPlayed > 0 ||
-                  opponentStats.wordsPlayed > 0) && (
+              {gameStarted && (
                   <div
                     className={`border-t ${
                       darkMode ? "border-gray-700" : "border-gray-300"
@@ -2903,16 +2901,6 @@ const WordGame = () => {
               )}
             </div>
 
-            {/* Message Box */}
-            <div
-              className={`p-2 sm:p-3 rounded-lg ${
-                darkMode ? "bg-blue-900" : "bg-blue-100"
-              } text-center text-xs sm:text-base min-h-[2.5rem] flex items-center justify-center`}
-            >
-              {message ||
-                (!gameStarted ? 'Click "Start Game" to begin!' : "\u00A0")}
-            </div>
-
             {/* Tile Rack */}
             <div
               ref={rackRef}
@@ -2947,8 +2935,11 @@ const WordGame = () => {
                 }
               }}
             >
-              <div className="text-xs sm:text-sm mb-2 font-semibold">
-                <span>Your Tiles</span>
+              <div className="text-xs sm:text-sm mb-2 flex items-center justify-between gap-2">
+                <span className="font-semibold">Your Tiles</span>
+                <span className={`text-right truncate ${darkMode ? "text-blue-400" : "text-blue-600"}`}>
+                  {message || (!gameStarted ? 'Tap ▶ to start' : '')}
+                </span>
               </div>
               <div
                 className="flex gap-1 sm:gap-2 justify-start flex-wrap"
