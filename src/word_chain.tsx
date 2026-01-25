@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef, useCallback } from "react";
 import {
   Moon,
   Sun,
-  RotateCcw,
+  Play,
   Check,
   X,
   ArrowRight,
@@ -468,6 +468,8 @@ const WordGame = () => {
   const [consecutivePasses, setConsecutivePasses] = useState<number>(0); // Tracks consecutive passes by both players
   const [showPassWarning, setShowPassWarning] = useState<boolean>(false); // Shows warning before final pass
   const [statsExpanded, setStatsExpanded] = useState<boolean>(false); // Details section collapsed by default
+  const [comboStreak, setComboStreak] = useState<number>(0); // Current combo streak (0 = no combo, 2+ = active combo)
+  const [comboTiles, setComboTiles] = useState<PlacedTile[]>([]); // Tiles that can continue the combo (last opponent's played tiles)
 
   // Touch drag state
   const [touchDragTile, setTouchDragTile] = useState<{
@@ -477,10 +479,16 @@ const WordGame = () => {
     row?: number;
     col?: number;
   } | null>(null);
-  const [touchDragPosition, setTouchDragPosition] = useState<{ x: number; y: number } | null>(null);
-  const [touchMultiTiles, setTouchMultiTiles] = useState<{ tiles: Letter[]; indices: number[] } | null>(null);
+  const [touchDragPosition, setTouchDragPosition] = useState<{
+    x: number;
+    y: number;
+  } | null>(null);
+  const [touchMultiTiles, setTouchMultiTiles] = useState<{
+    tiles: Letter[];
+    indices: number[];
+  } | null>(null);
   const boardRef = useRef<HTMLDivElement>(null);
-  const rackRef = useRef<HTMLDivElement>(null)
+  const rackRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     // Only load messages on mount, not the word list
@@ -991,301 +999,362 @@ const WordGame = () => {
   };
 
   // Touch event handlers for mobile support
-  const handleTouchStart = useCallback((
-    e: React.TouchEvent,
-    letter: Letter,
-    source: "rack" | "board",
-    index?: number,
-    row?: number,
-    col?: number,
-  ) => {
-    if (currentPlayer !== "player") return;
+  const handleTouchStart = useCallback(
+    (
+      e: React.TouchEvent,
+      letter: Letter,
+      source: "rack" | "board",
+      index?: number,
+      row?: number,
+      col?: number,
+    ) => {
+      if (currentPlayer !== "player") return;
 
-    // Don't start drag in swap mode - just handle selection
-    if (isSwapMode) {
-      if (source === "rack" && index !== undefined) {
-        handleMouseDown(index);
+      // Don't start drag in swap mode - just handle selection
+      if (isSwapMode) {
+        if (source === "rack" && index !== undefined) {
+          handleMouseDown(index);
+        }
+        return;
       }
-      return;
-    }
 
-    const touch = e.touches[0];
+      const touch = e.touches[0];
 
-    // For multi-select mode, handle group drag
-    if (
-      source === "rack" &&
-      multiSelectMode &&
-      selectedTiles.length > 1 &&
-      index !== undefined &&
-      selectedTiles.includes(index)
-    ) {
-      const tilesToDrag = selectedTiles.map((i) => playerRack[i]);
-      setTouchMultiTiles({ tiles: tilesToDrag, indices: selectedTiles });
-      setTouchDragTile(null);
-    } else {
-      setTouchDragTile({ letter, source, index, row, col });
-      setTouchMultiTiles(null);
-    }
+      // For multi-select mode, handle group drag
+      if (
+        source === "rack" &&
+        multiSelectMode &&
+        selectedTiles.length > 1 &&
+        index !== undefined &&
+        selectedTiles.includes(index)
+      ) {
+        const tilesToDrag = selectedTiles.map((i) => playerRack[i]);
+        setTouchMultiTiles({ tiles: tilesToDrag, indices: selectedTiles });
+        setTouchDragTile(null);
+      } else {
+        setTouchDragTile({ letter, source, index, row, col });
+        setTouchMultiTiles(null);
+      }
 
-    setTouchDragPosition({ x: touch.clientX, y: touch.clientY });
-  }, [currentPlayer, isSwapMode, multiSelectMode, selectedTiles, playerRack]);
+      setTouchDragPosition({ x: touch.clientX, y: touch.clientY });
+    },
+    [currentPlayer, isSwapMode, multiSelectMode, selectedTiles, playerRack],
+  );
 
-  const handleTouchMove = useCallback((e: React.TouchEvent) => {
-    if (!touchDragTile && !touchMultiTiles) return;
+  const handleTouchMove = useCallback(
+    (e: React.TouchEvent) => {
+      if (!touchDragTile && !touchMultiTiles) return;
 
-    e.preventDefault(); // Prevent scrolling while dragging
-    const touch = e.touches[0];
-    setTouchDragPosition({ x: touch.clientX, y: touch.clientY });
-  }, [touchDragTile, touchMultiTiles]);
+      e.preventDefault(); // Prevent scrolling while dragging
+      const touch = e.touches[0];
+      setTouchDragPosition({ x: touch.clientX, y: touch.clientY });
+    },
+    [touchDragTile, touchMultiTiles],
+  );
 
-  const handleTouchEnd = useCallback((_e: React.TouchEvent) => {
-    if (!touchDragTile && !touchMultiTiles) return;
-    if (!touchDragPosition) {
-      setTouchDragTile(null);
-      setTouchMultiTiles(null);
-      return;
-    }
+  const handleTouchEnd = useCallback(
+    (_e: React.TouchEvent) => {
+      if (!touchDragTile && !touchMultiTiles) return;
+      if (!touchDragPosition) {
+        setTouchDragTile(null);
+        setTouchMultiTiles(null);
+        return;
+      }
 
-    // Find what element is under the touch point
-    const element = document.elementFromPoint(touchDragPosition.x, touchDragPosition.y);
-    if (!element) {
+      // Find what element is under the touch point
+      const element = document.elementFromPoint(
+        touchDragPosition.x,
+        touchDragPosition.y,
+      );
+      if (!element) {
+        setTouchDragTile(null);
+        setTouchMultiTiles(null);
+        setTouchDragPosition(null);
+        return;
+      }
+
+      // Check if dropped on board cell
+      const boardCell = element.closest("[data-board-cell]");
+      if (boardCell) {
+        const row = parseInt(boardCell.getAttribute("data-row") || "-1");
+        const col = parseInt(boardCell.getAttribute("data-col") || "-1");
+        if (row >= 0 && col >= 0) {
+          // Simulate drop on board
+          handleTouchDropOnBoard(row, col);
+        }
+      }
+
+      // Check if dropped on rack
+      const rackCell = element.closest("[data-rack-index]");
+      if (rackCell) {
+        const dropIndex = parseInt(
+          rackCell.getAttribute("data-rack-index") || "0",
+        );
+        handleTouchDropOnRack(dropIndex);
+      }
+
+      // Check if dropped on rack container (return tile to rack)
+      const rackContainer = element.closest("[data-rack-container]");
+      if (rackContainer && !rackCell) {
+        handleTouchDropOnRack(playerRack.length);
+      }
+
       setTouchDragTile(null);
       setTouchMultiTiles(null);
       setTouchDragPosition(null);
-      return;
-    }
+    },
+    [touchDragTile, touchMultiTiles, touchDragPosition, playerRack.length],
+  );
 
-    // Check if dropped on board cell
-    const boardCell = element.closest('[data-board-cell]');
-    if (boardCell) {
-      const row = parseInt(boardCell.getAttribute('data-row') || '-1');
-      const col = parseInt(boardCell.getAttribute('data-col') || '-1');
-      if (row >= 0 && col >= 0) {
-        // Simulate drop on board
-        handleTouchDropOnBoard(row, col);
+  const handleTouchDropOnBoard = useCallback(
+    (row: number, col: number) => {
+      if (currentPlayer !== "player" || showTimeoutDialog || timerExpired)
+        return;
+
+      if (touchMultiTiles) {
+        const { tiles, indices } = touchMultiTiles;
+        const newBoard = board.map((r) => [...r]);
+        const newPlacedTiles = [...placedTiles];
+
+        let startCol = col;
+        let startRow = row;
+
+        if (orientation === "horizontal") {
+          const adjustedCol = col - dragOffset;
+
+          // Check for adjacent tiles
+          let leftTile = col;
+          while (leftTile > 0 && board[row][leftTile - 1] !== null) {
+            leftTile--;
+          }
+
+          if (board[row][col] !== null) {
+            startCol = adjustedCol;
+            if (startCol < 0) startCol = 0;
+            if (startCol + tiles.length > BOARD_SIZE)
+              startCol = BOARD_SIZE - tiles.length;
+
+            let blocked = false;
+            for (let i = 0; i < tiles.length; i++) {
+              if (
+                startCol + i >= BOARD_SIZE ||
+                board[row][startCol + i] !== null
+              ) {
+                blocked = true;
+                break;
+              }
+            }
+
+            if (blocked) {
+              let rightTile = col;
+              while (
+                rightTile < BOARD_SIZE - 1 &&
+                board[row][rightTile + 1] !== null
+              ) {
+                rightTile++;
+              }
+              startCol = rightTile + 1;
+            }
+          } else {
+            startCol = adjustedCol;
+            if (startCol < 0) startCol = 0;
+            if (startCol + tiles.length > BOARD_SIZE)
+              startCol = BOARD_SIZE - tiles.length;
+          }
+
+          let canPlace = true;
+          for (let i = 0; i < tiles.length; i++) {
+            if (
+              startCol + i >= BOARD_SIZE ||
+              newBoard[row][startCol + i] !== null
+            ) {
+              canPlace = false;
+              break;
+            }
+          }
+
+          if (!canPlace) {
+            setMessage(getMessage("NotEnoughSpace"));
+            return;
+          }
+
+          tiles.forEach((letter: Letter, i: number) => {
+            newBoard[row][startCol + i] = {
+              letter,
+              score: LETTER_SCORES[letter],
+            };
+            newPlacedTiles.push({ row, col: startCol + i, letter });
+          });
+        } else {
+          // Vertical placement
+          const adjustedRow = row - dragOffset;
+
+          if (board[row][col] !== null) {
+            startRow = adjustedRow;
+            if (startRow < 0) startRow = 0;
+            if (startRow + tiles.length > BOARD_SIZE)
+              startRow = BOARD_SIZE - tiles.length;
+
+            let blocked = false;
+            for (let i = 0; i < tiles.length; i++) {
+              if (
+                startRow + i >= BOARD_SIZE ||
+                board[startRow + i][col] !== null
+              ) {
+                blocked = true;
+                break;
+              }
+            }
+
+            if (blocked) {
+              let bottomTile = row;
+              while (
+                bottomTile < BOARD_SIZE - 1 &&
+                board[bottomTile + 1][col] !== null
+              ) {
+                bottomTile++;
+              }
+              startRow = bottomTile + 1;
+            }
+          } else {
+            startRow = adjustedRow;
+            if (startRow < 0) startRow = 0;
+            if (startRow + tiles.length > BOARD_SIZE)
+              startRow = BOARD_SIZE - tiles.length;
+          }
+
+          let canPlace = true;
+          for (let i = 0; i < tiles.length; i++) {
+            if (
+              startRow + i >= BOARD_SIZE ||
+              newBoard[startRow + i][col] !== null
+            ) {
+              canPlace = false;
+              break;
+            }
+          }
+
+          if (!canPlace) {
+            setMessage(getMessage("NotEnoughSpace"));
+            return;
+          }
+
+          tiles.forEach((letter: Letter, i: number) => {
+            newBoard[startRow + i][col] = {
+              letter,
+              score: LETTER_SCORES[letter],
+            };
+            newPlacedTiles.push({ row: startRow + i, col, letter });
+          });
+        }
+
+        const newRack = playerRack.filter((_, idx) => !indices.includes(idx));
+
+        setBoard(newBoard);
+        setPlayerRack(newRack);
+        setPlacedTiles(newPlacedTiles);
+        setSelectedTiles([]);
+        setMultiSelectMode(false);
+        setOrientation("horizontal");
+        setDragOffset(0);
+        setMessage("");
+        return;
       }
-    }
 
-    // Check if dropped on rack
-    const rackCell = element.closest('[data-rack-index]');
-    if (rackCell) {
-      const dropIndex = parseInt(rackCell.getAttribute('data-rack-index') || '0');
-      handleTouchDropOnRack(dropIndex);
-    }
+      if (!touchDragTile || board[row][col] !== null) return;
 
-    // Check if dropped on rack container (return tile to rack)
-    const rackContainer = element.closest('[data-rack-container]');
-    if (rackContainer && !rackCell) {
-      handleTouchDropOnRack(playerRack.length);
-    }
-
-    setTouchDragTile(null);
-    setTouchMultiTiles(null);
-    setTouchDragPosition(null);
-  }, [touchDragTile, touchMultiTiles, touchDragPosition, playerRack.length]);
-
-  const handleTouchDropOnBoard = useCallback((row: number, col: number) => {
-    if (currentPlayer !== "player" || showTimeoutDialog || timerExpired) return;
-
-    if (touchMultiTiles) {
-      const { tiles, indices } = touchMultiTiles;
       const newBoard = board.map((r) => [...r]);
-      const newPlacedTiles = [...placedTiles];
+      newBoard[row][col] = {
+        letter: touchDragTile.letter,
+        score: LETTER_SCORES[touchDragTile.letter],
+      };
 
-      let startCol = col;
-      let startRow = row;
-
-      if (orientation === "horizontal") {
-        const adjustedCol = col - dragOffset;
-
-        // Check for adjacent tiles
-        let leftTile = col;
-        while (leftTile > 0 && board[row][leftTile - 1] !== null) {
-          leftTile--;
-        }
-
-        if (board[row][col] !== null) {
-          startCol = adjustedCol;
-          if (startCol < 0) startCol = 0;
-          if (startCol + tiles.length > BOARD_SIZE)
-            startCol = BOARD_SIZE - tiles.length;
-
-          let blocked = false;
-          for (let i = 0; i < tiles.length; i++) {
-            if (startCol + i >= BOARD_SIZE || board[row][startCol + i] !== null) {
-              blocked = true;
-              break;
-            }
-          }
-
-          if (blocked) {
-            let rightTile = col;
-            while (rightTile < BOARD_SIZE - 1 && board[row][rightTile + 1] !== null) {
-              rightTile++;
-            }
-            startCol = rightTile + 1;
-          }
-        } else {
-          startCol = adjustedCol;
-          if (startCol < 0) startCol = 0;
-          if (startCol + tiles.length > BOARD_SIZE)
-            startCol = BOARD_SIZE - tiles.length;
-        }
-
-        let canPlace = true;
-        for (let i = 0; i < tiles.length; i++) {
-          if (startCol + i >= BOARD_SIZE || newBoard[row][startCol + i] !== null) {
-            canPlace = false;
-            break;
-          }
-        }
-
-        if (!canPlace) {
-          setMessage(getMessage("NotEnoughSpace"));
-          return;
-        }
-
-        tiles.forEach((letter: Letter, i: number) => {
-          newBoard[row][startCol + i] = {
-            letter,
-            score: LETTER_SCORES[letter],
-          };
-          newPlacedTiles.push({ row, col: startCol + i, letter });
-        });
-      } else {
-        // Vertical placement
-        const adjustedRow = row - dragOffset;
-
-        if (board[row][col] !== null) {
-          startRow = adjustedRow;
-          if (startRow < 0) startRow = 0;
-          if (startRow + tiles.length > BOARD_SIZE)
-            startRow = BOARD_SIZE - tiles.length;
-
-          let blocked = false;
-          for (let i = 0; i < tiles.length; i++) {
-            if (startRow + i >= BOARD_SIZE || board[startRow + i][col] !== null) {
-              blocked = true;
-              break;
-            }
-          }
-
-          if (blocked) {
-            let bottomTile = row;
-            while (bottomTile < BOARD_SIZE - 1 && board[bottomTile + 1][col] !== null) {
-              bottomTile++;
-            }
-            startRow = bottomTile + 1;
-          }
-        } else {
-          startRow = adjustedRow;
-          if (startRow < 0) startRow = 0;
-          if (startRow + tiles.length > BOARD_SIZE)
-            startRow = BOARD_SIZE - tiles.length;
-        }
-
-        let canPlace = true;
-        for (let i = 0; i < tiles.length; i++) {
-          if (startRow + i >= BOARD_SIZE || newBoard[startRow + i][col] !== null) {
-            canPlace = false;
-            break;
-          }
-        }
-
-        if (!canPlace) {
-          setMessage(getMessage("NotEnoughSpace"));
-          return;
-        }
-
-        tiles.forEach((letter: Letter, i: number) => {
-          newBoard[startRow + i][col] = {
-            letter,
-            score: LETTER_SCORES[letter],
-          };
-          newPlacedTiles.push({ row: startRow + i, col, letter });
-        });
-      }
-
-      const newRack = playerRack.filter((_, idx) => !indices.includes(idx));
-
-      setBoard(newBoard);
-      setPlayerRack(newRack);
-      setPlacedTiles(newPlacedTiles);
-      setSelectedTiles([]);
-      setMultiSelectMode(false);
-      setOrientation("horizontal");
-      setDragOffset(0);
-      setMessage("");
-      return;
-    }
-
-    if (!touchDragTile || board[row][col] !== null) return;
-
-    const newBoard = board.map((r) => [...r]);
-    newBoard[row][col] = {
-      letter: touchDragTile.letter,
-      score: LETTER_SCORES[touchDragTile.letter],
-    };
-
-    if (touchDragTile.source === "rack" && touchDragTile.index !== undefined) {
-      const newRack = [...playerRack];
-      newRack.splice(touchDragTile.index, 1);
-      setPlayerRack(newRack);
-      setPlacedTiles([
-        ...placedTiles,
-        { row, col, letter: touchDragTile.letter },
-      ]);
-      setBoard(newBoard);
-    } else if (
-      touchDragTile.source === "board" &&
-      touchDragTile.row !== undefined &&
-      touchDragTile.col !== undefined
-    ) {
-      newBoard[touchDragTile.row][touchDragTile.col] = null;
-      setBoard(newBoard);
-      setPlacedTiles(
-        placedTiles.map((t) =>
-          t.row === touchDragTile.row && t.col === touchDragTile.col
-            ? { ...t, row, col }
-            : t,
-        ),
-      );
-    }
-
-    setMessage("");
-  }, [currentPlayer, showTimeoutDialog, timerExpired, touchMultiTiles, touchDragTile, board, placedTiles, playerRack, orientation, dragOffset]);
-
-  const handleTouchDropOnRack = useCallback((dropIndex: number) => {
-    if (currentPlayer !== "player") return;
-
-    if (touchDragTile) {
       if (
+        touchDragTile.source === "rack" &&
+        touchDragTile.index !== undefined
+      ) {
+        const newRack = [...playerRack];
+        newRack.splice(touchDragTile.index, 1);
+        setPlayerRack(newRack);
+        setPlacedTiles([
+          ...placedTiles,
+          { row, col, letter: touchDragTile.letter },
+        ]);
+        setBoard(newBoard);
+      } else if (
         touchDragTile.source === "board" &&
         touchDragTile.row !== undefined &&
         touchDragTile.col !== undefined
       ) {
-        const newBoard = board.map((r) => [...r]);
         newBoard[touchDragTile.row][touchDragTile.col] = null;
         setBoard(newBoard);
-
-        setPlayerRack([...playerRack, touchDragTile.letter]);
         setPlacedTiles(
-          placedTiles.filter(
-            (t) => !(t.row === touchDragTile.row && t.col === touchDragTile.col),
+          placedTiles.map((t) =>
+            t.row === touchDragTile.row && t.col === touchDragTile.col
+              ? { ...t, row, col }
+              : t,
           ),
         );
-      } else if (
-        touchDragTile.source === "rack" &&
-        touchDragTile.index !== undefined &&
-        !multiSelectMode
-      ) {
-        const newRack = [...playerRack];
-        const [movedTile] = newRack.splice(touchDragTile.index, 1);
-        newRack.splice(dropIndex, 0, movedTile);
-        setPlayerRack(newRack);
       }
-    }
-  }, [currentPlayer, touchDragTile, board, playerRack, placedTiles, multiSelectMode]);
+
+      setMessage("");
+    },
+    [
+      currentPlayer,
+      showTimeoutDialog,
+      timerExpired,
+      touchMultiTiles,
+      touchDragTile,
+      board,
+      placedTiles,
+      playerRack,
+      orientation,
+      dragOffset,
+    ],
+  );
+
+  const handleTouchDropOnRack = useCallback(
+    (dropIndex: number) => {
+      if (currentPlayer !== "player") return;
+
+      if (touchDragTile) {
+        if (
+          touchDragTile.source === "board" &&
+          touchDragTile.row !== undefined &&
+          touchDragTile.col !== undefined
+        ) {
+          const newBoard = board.map((r) => [...r]);
+          newBoard[touchDragTile.row][touchDragTile.col] = null;
+          setBoard(newBoard);
+
+          setPlayerRack([...playerRack, touchDragTile.letter]);
+          setPlacedTiles(
+            placedTiles.filter(
+              (t) =>
+                !(t.row === touchDragTile.row && t.col === touchDragTile.col),
+            ),
+          );
+        } else if (
+          touchDragTile.source === "rack" &&
+          touchDragTile.index !== undefined &&
+          !multiSelectMode
+        ) {
+          const newRack = [...playerRack];
+          const [movedTile] = newRack.splice(touchDragTile.index, 1);
+          newRack.splice(dropIndex, 0, movedTile);
+          setPlayerRack(newRack);
+        }
+      }
+    },
+    [
+      currentPlayer,
+      touchDragTile,
+      board,
+      playerRack,
+      placedTiles,
+      multiSelectMode,
+    ],
+  );
 
   const handleDropOnBoard = (e: React.DragEvent, row: number, col: number) => {
     e.preventDefault();
@@ -2111,17 +2180,17 @@ const WordGame = () => {
       let maxAttempts = 50;
       if (difficulty === "beginner") {
         maxWordLength = Math.min(5, opponentRack.length);
-        maxAttempts = 50;
+        maxAttempts = 250;
       } else if (difficulty === "intermediate") {
         maxWordLength = Math.min(6, opponentRack.length);
-        maxAttempts = 100;
+        maxAttempts = 500;
       } else if (difficulty === "advanced") {
         maxWordLength = Math.min(7, opponentRack.length);
-        maxAttempts = 150;
+        maxAttempts = 1000;
       } else {
         // expert
         maxWordLength = Math.min(7, opponentRack.length);
-        maxAttempts = 200;
+        maxAttempts = 2500;
       }
 
       // Try to find a valid word placement
@@ -2301,6 +2370,7 @@ const WordGame = () => {
       setConsecutivePasses(0); // Reset consecutive passes counter
       setCurrentPlayer("player");
       setLastPlayedTiles(opponentPlacedTiles);
+      setComboTiles(opponentPlacedTiles); // Set combo tiles for player to chain off
 
       if (isRunOut) {
         setMessage(
@@ -2331,29 +2401,90 @@ const WordGame = () => {
       wordScore += 50;
     }
 
-    setPlayerScore(playerScore + wordScore);
+    // Check for combo - does the player's word touch any of the combo tiles?
+    let isCombo = false;
+    if (comboTiles.length > 0) {
+      // Check if any placed tile is adjacent to a combo tile
+      for (const placed of placedTiles) {
+        for (const combo of comboTiles) {
+          // Check if tiles are adjacent (horizontally or vertically)
+          const isAdjacent =
+            (placed.row === combo.row && Math.abs(placed.col - combo.col) === 1) ||
+            (placed.col === combo.col && Math.abs(placed.row - combo.row) === 1);
+          // Or if the word uses the same position (extending through the combo tile)
+          const isSamePosition = placed.row === combo.row && placed.col === combo.col;
+          if (isAdjacent || isSamePosition) {
+            isCombo = true;
+            break;
+          }
+        }
+        if (isCombo) break;
+      }
+
+      // Also check if the word formation uses any existing combo tile on the board
+      if (!isCombo) {
+        for (const combo of comboTiles) {
+          // Check if any placed tile forms a word that includes the combo tile position
+          for (const placed of placedTiles) {
+            // Same row - check if combo tile is between or adjacent to the word
+            if (placed.row === combo.row) {
+              const minCol = Math.min(...placedTiles.filter(t => t.row === placed.row).map(t => t.col));
+              const maxCol = Math.max(...placedTiles.filter(t => t.row === placed.row).map(t => t.col));
+              if (combo.col >= minCol - 1 && combo.col <= maxCol + 1) {
+                isCombo = true;
+                break;
+              }
+            }
+            // Same col - check if combo tile is between or adjacent to the word
+            if (placed.col === combo.col) {
+              const minRow = Math.min(...placedTiles.filter(t => t.col === placed.col).map(t => t.row));
+              const maxRow = Math.max(...placedTiles.filter(t => t.col === placed.col).map(t => t.row));
+              if (combo.row >= minRow - 1 && combo.row <= maxRow + 1) {
+                isCombo = true;
+                break;
+              }
+            }
+          }
+          if (isCombo) break;
+        }
+      }
+    }
+
+    // Apply combo multiplier
+    let newComboStreak = 0;
+    let finalScore = wordScore;
+    let comboMultiplier = 1;
+
+    if (isCombo) {
+      newComboStreak = comboStreak === 0 ? 2 : comboStreak + 1;
+      comboMultiplier = newComboStreak;
+      finalScore = wordScore * comboMultiplier;
+    }
+
+    setComboStreak(newComboStreak);
+    setPlayerScore(playerScore + finalScore);
     setPlayerStats({
       wordsPlayed: playerStats.wordsPlayed + 1,
-      totalScore: playerStats.totalScore + wordScore,
+      totalScore: playerStats.totalScore + finalScore,
       runOuts: playerStats.runOuts + (isRunOut ? 1 : 0),
-      bestWordScore: Math.max(playerStats.bestWordScore, wordScore),
+      bestWordScore: Math.max(playerStats.bestWordScore, finalScore),
     });
 
-    if (isRunOut) {
-      setMessage(
-        getMessage("ScoreFormat", {
-          score: wordScore.toString(),
-          words: validation.words.join(", "),
-        }) + " 🎉 RUN OUT! (+50)",
-      );
-    } else {
-      setMessage(
-        getMessage("ScoreFormat", {
-          score: wordScore.toString(),
-          words: validation.words.join(", "),
-        }),
-      );
+    // Build message with combo info
+    let scoreMessage = getMessage("ScoreFormat", {
+      score: finalScore.toString(),
+      words: validation.words.join(", "),
+    });
+
+    if (isCombo) {
+      scoreMessage += ` 🔥 ${comboMultiplier}x COMBO!`;
     }
+
+    if (isRunOut) {
+      scoreMessage += " 🎉 RUN OUT! (+50)";
+    }
+
+    setMessage(scoreMessage);
 
     const tilesToDraw = Math.min(placedTiles.length, tileBag.length);
     const newTiles = tileBag.slice(0, tilesToDraw);
@@ -2362,6 +2493,7 @@ const WordGame = () => {
     setPlayerRack([...playerRack, ...newTiles]);
     setTileBag(remainingBag);
     setLastPlayedTiles(placedTiles);
+    setComboTiles(placedTiles); // Set player's tiles as new combo tiles for next turn
     setPlacedTiles([]);
     setInvalidTiles([]);
     setIsFirstMove(false);
@@ -2620,6 +2752,8 @@ const WordGame = () => {
     }
     setTimeRemaining(0);
     setMessage("");
+    setComboStreak(0);
+    setComboTiles([]);
   };
 
   const bgColor = darkMode ? "bg-gray-900" : "bg-gray-100";
@@ -2646,7 +2780,7 @@ const WordGame = () => {
                 }`}
                 title="Start Game"
               >
-                <RotateCcw size={20} />
+                <Play size={20} />
               </button>
             ) : (
               <button
@@ -2685,6 +2819,17 @@ const WordGame = () => {
                     {playerScore}
                   </div>
                 </div>
+                {/* Combo Streak Display */}
+                {comboStreak >= 2 && (
+                  <div className="flex-1 text-center">
+                    <div className="text-orange-500 font-bold text-lg sm:text-xl animate-pulse">
+                      🔥 {comboStreak}x
+                    </div>
+                    <div className="text-[0.6rem] sm:text-xs text-orange-400">
+                      COMBO
+                    </div>
+                  </div>
+                )}
                 <div className="flex-1 text-right">
                   <div className="text-xs sm:text-sm text-gray-400">
                     Opponent
@@ -2704,16 +2849,27 @@ const WordGame = () => {
                 <button
                   onClick={() => setStatsExpanded(!statsExpanded)}
                   className={`w-full flex items-center justify-between text-xs sm:text-sm py-1 ${
-                    darkMode ? "text-gray-400 hover:text-gray-300" : "text-gray-500 hover:text-gray-600"
+                    darkMode
+                      ? "text-gray-400 hover:text-gray-300"
+                      : "text-gray-500 hover:text-gray-600"
                   }`}
                 >
                   <span className="flex items-center gap-1">
-                    {statsExpanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+                    {statsExpanded ? (
+                      <ChevronUp size={14} />
+                    ) : (
+                      <ChevronDown size={14} />
+                    )}
                     Details
                   </span>
                   <span className="text-[0.65rem] sm:text-xs">
-                    {gameStarted ? `${tileBag.length} tiles` : difficulty.charAt(0).toUpperCase() + difficulty.slice(1)}
-                    {timerDuration > 0 ? ` / ${timerDuration >= 60 ? `${timerDuration / 60}m` : `${timerDuration}s`}` : ''}
+                    {gameStarted
+                      ? `${tileBag.length} tiles`
+                      : difficulty.charAt(0).toUpperCase() +
+                        difficulty.slice(1)}
+                    {timerDuration > 0
+                      ? ` / ${timerDuration >= 60 ? `${timerDuration / 60}m` : `${timerDuration}s`}`
+                      : ""}
                   </span>
                 </button>
 
@@ -2754,7 +2910,9 @@ const WordGame = () => {
                         </label>
                         <select
                           value={timerDuration}
-                          onChange={(e) => setTimerDuration(Number(e.target.value))}
+                          onChange={(e) =>
+                            setTimerDuration(Number(e.target.value))
+                          }
                           className={`w-full p-2 rounded text-xs sm:text-sm ${
                             darkMode ? "bg-gray-700" : "bg-gray-200"
                           }`}
@@ -2779,7 +2937,9 @@ const WordGame = () => {
                       <div className="grid grid-cols-2 gap-3 text-xs sm:text-sm">
                         {/* Player Stats */}
                         <div>
-                          <div className="text-gray-400 mb-1 font-semibold">You</div>
+                          <div className="text-gray-400 mb-1 font-semibold">
+                            You
+                          </div>
                           <div className="space-y-1">
                             <div className="flex justify-between">
                               <span className="text-gray-400">Words:</span>
@@ -2815,7 +2975,9 @@ const WordGame = () => {
 
                         {/* Opponent Stats */}
                         <div>
-                          <div className="text-gray-400 mb-1 font-semibold">Opponent</div>
+                          <div className="text-gray-400 mb-1 font-semibold">
+                            Opponent
+                          </div>
                           <div className="space-y-1">
                             <div className="flex justify-between">
                               <span className="text-gray-400">Words:</span>
@@ -2856,30 +3018,30 @@ const WordGame = () => {
 
               {/* Time Remaining */}
               {timerDuration > 0 &&
-              gameStarted &&
-              currentPlayer === "player" &&
-              !gameEnded && (
-                <div
-                  className={`mt-3 p-2 rounded flex items-center justify-center ${
-                    timeRemaining <= 10
-                      ? darkMode
-                        ? "bg-red-900"
-                        : "bg-red-200"
-                      : darkMode
-                        ? "bg-gray-700"
-                        : "bg-gray-300"
-                  }`}
-                >
+                gameStarted &&
+                currentPlayer === "player" &&
+                !gameEnded && (
                   <div
-                    className={`text-sm sm:text-base font-bold ${
-                      timeRemaining <= 10 ? "text-red-500" : ""
+                    className={`mt-3 p-2 rounded flex items-center justify-center ${
+                      timeRemaining <= 10
+                        ? darkMode
+                          ? "bg-red-900"
+                          : "bg-red-200"
+                        : darkMode
+                          ? "bg-gray-700"
+                          : "bg-gray-300"
                     }`}
                   >
-                    Time: {Math.floor(timeRemaining / 60)}:
-                    {(timeRemaining % 60).toString().padStart(2, "0")}
+                    <div
+                      className={`text-sm sm:text-base font-bold ${
+                        timeRemaining <= 10 ? "text-red-500" : ""
+                      }`}
+                    >
+                      Time: {Math.floor(timeRemaining / 60)}:
+                      {(timeRemaining % 60).toString().padStart(2, "0")}
+                    </div>
                   </div>
-                </div>
-              )}
+                )}
             </div>
 
             {/* Tile Rack */}
@@ -2918,8 +3080,10 @@ const WordGame = () => {
             >
               <div className="text-xs sm:text-sm mb-2 flex items-center justify-between gap-2">
                 <span className="font-semibold">Your Tiles</span>
-                <span className={`text-right truncate ${darkMode ? "text-blue-400" : "text-blue-600"}`}>
-                  {message || (!gameStarted ? 'Tap ▶ to start' : '')}
+                <span
+                  className={`text-right truncate ${darkMode ? "text-blue-400" : "text-blue-600"}`}
+                >
+                  {message || (!gameStarted ? "Tap ▶ to start" : "")}
                 </span>
               </div>
               <div
@@ -2957,10 +3121,16 @@ const WordGame = () => {
                           const tilesToDrag = selectedTiles.map(
                             (i) => playerRack[i],
                           );
-                          setTouchMultiTiles({ tiles: tilesToDrag, indices: selectedTiles });
+                          setTouchMultiTiles({
+                            tiles: tilesToDrag,
+                            indices: selectedTiles,
+                          });
                           setTouchDragTile(null);
                           const touch = e.touches[0];
-                          setTouchDragPosition({ x: touch.clientX, y: touch.clientY });
+                          setTouchDragPosition({
+                            x: touch.clientX,
+                            y: touch.clientY,
+                          });
                         }}
                         onTouchMove={handleTouchMove}
                         onTouchEnd={handleTouchEnd}
@@ -3362,6 +3532,9 @@ const WordGame = () => {
                       const isLastPlayed = lastPlayedTiles.some(
                         (t) => t.row === rowIndex && t.col === colIndex,
                       );
+                      const isComboTile = comboTiles.some(
+                        (t) => t.row === rowIndex && t.col === colIndex,
+                      );
 
                       // Generate random animation parameters for each tile
                       const animationDelay =
@@ -3408,6 +3581,10 @@ const WordGame = () => {
                                 )
                           } ${cell ? "text-white" : "text-white/70"} ${
                             showCelebration && cell ? "tile-celebrate" : ""
+                          } ${
+                            isComboTile && cell && !showCelebration
+                              ? "ring-2 ring-orange-400 ring-offset-1 ring-offset-transparent"
+                              : ""
                           }`}
                           {...(showCelebration && cell
                             ? {
@@ -3561,13 +3738,17 @@ const WordGame = () => {
           // eslint-disable-next-line react/forbid-dom-props
           <div
             className="floating-drag-tile"
-            style={{
-              '--drag-x': `${touchDragPosition.x - 24}px`,
-              '--drag-y': `${touchDragPosition.y - 24}px`,
-            } as React.CSSProperties}
+            style={
+              {
+                "--drag-x": `${touchDragPosition.x - 24}px`,
+                "--drag-y": `${touchDragPosition.y - 24}px`,
+              } as React.CSSProperties
+            }
           >
             {touchMultiTiles ? (
-              <div className={`flex ${orientation === 'vertical' ? 'flex-col' : 'flex-row'} gap-1 opacity-90`}>
+              <div
+                className={`flex ${orientation === "vertical" ? "flex-col" : "flex-row"} gap-1 opacity-90`}
+              >
                 {touchMultiTiles.tiles.map((letter, i) => (
                   <div
                     key={i}
@@ -3582,8 +3763,12 @@ const WordGame = () => {
               <div
                 className={`w-12 h-12 flex flex-col items-center justify-center rounded-lg font-bold ${tileBg} text-white shadow-lg opacity-90`}
               >
-                <div className="text-xl leading-none">{touchDragTile.letter}</div>
-                <div className="text-[0.5rem]">{LETTER_SCORES[touchDragTile.letter]}</div>
+                <div className="text-xl leading-none">
+                  {touchDragTile.letter}
+                </div>
+                <div className="text-[0.5rem]">
+                  {LETTER_SCORES[touchDragTile.letter]}
+                </div>
               </div>
             ) : null}
           </div>
