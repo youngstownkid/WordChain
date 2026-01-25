@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef, useCallback } from "react";
 import {
   Moon,
   Sun,
@@ -465,6 +465,19 @@ const WordGame = () => {
   const [gameMode, setGameMode] = useState<GameMode>("normal"); // Tracks current game mode
   const [consecutivePasses, setConsecutivePasses] = useState<number>(0); // Tracks consecutive passes by both players
   const [showPassWarning, setShowPassWarning] = useState<boolean>(false); // Shows warning before final pass
+
+  // Touch drag state
+  const [touchDragTile, setTouchDragTile] = useState<{
+    letter: Letter;
+    source: "rack" | "board";
+    index?: number;
+    row?: number;
+    col?: number;
+  } | null>(null);
+  const [touchDragPosition, setTouchDragPosition] = useState<{ x: number; y: number } | null>(null);
+  const [touchMultiTiles, setTouchMultiTiles] = useState<{ tiles: Letter[]; indices: number[] } | null>(null);
+  const boardRef = useRef<HTMLDivElement>(null);
+  const rackRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     // Only load messages on mount, not the word list
@@ -973,6 +986,303 @@ const WordGame = () => {
     e.preventDefault();
     e.dataTransfer.dropEffect = "move";
   };
+
+  // Touch event handlers for mobile support
+  const handleTouchStart = useCallback((
+    e: React.TouchEvent,
+    letter: Letter,
+    source: "rack" | "board",
+    index?: number,
+    row?: number,
+    col?: number,
+  ) => {
+    if (currentPlayer !== "player") return;
+
+    // Don't start drag in swap mode - just handle selection
+    if (isSwapMode) {
+      if (source === "rack" && index !== undefined) {
+        handleMouseDown(index);
+      }
+      return;
+    }
+
+    const touch = e.touches[0];
+
+    // For multi-select mode, handle group drag
+    if (
+      source === "rack" &&
+      multiSelectMode &&
+      selectedTiles.length > 1 &&
+      index !== undefined &&
+      selectedTiles.includes(index)
+    ) {
+      const tilesToDrag = selectedTiles.map((i) => playerRack[i]);
+      setTouchMultiTiles({ tiles: tilesToDrag, indices: selectedTiles });
+      setTouchDragTile(null);
+    } else {
+      setTouchDragTile({ letter, source, index, row, col });
+      setTouchMultiTiles(null);
+    }
+
+    setTouchDragPosition({ x: touch.clientX, y: touch.clientY });
+  }, [currentPlayer, isSwapMode, multiSelectMode, selectedTiles, playerRack]);
+
+  const handleTouchMove = useCallback((e: React.TouchEvent) => {
+    if (!touchDragTile && !touchMultiTiles) return;
+
+    e.preventDefault(); // Prevent scrolling while dragging
+    const touch = e.touches[0];
+    setTouchDragPosition({ x: touch.clientX, y: touch.clientY });
+  }, [touchDragTile, touchMultiTiles]);
+
+  const handleTouchEnd = useCallback((_e: React.TouchEvent) => {
+    if (!touchDragTile && !touchMultiTiles) return;
+    if (!touchDragPosition) {
+      setTouchDragTile(null);
+      setTouchMultiTiles(null);
+      return;
+    }
+
+    // Find what element is under the touch point
+    const element = document.elementFromPoint(touchDragPosition.x, touchDragPosition.y);
+    if (!element) {
+      setTouchDragTile(null);
+      setTouchMultiTiles(null);
+      setTouchDragPosition(null);
+      return;
+    }
+
+    // Check if dropped on board cell
+    const boardCell = element.closest('[data-board-cell]');
+    if (boardCell) {
+      const row = parseInt(boardCell.getAttribute('data-row') || '-1');
+      const col = parseInt(boardCell.getAttribute('data-col') || '-1');
+      if (row >= 0 && col >= 0) {
+        // Simulate drop on board
+        handleTouchDropOnBoard(row, col);
+      }
+    }
+
+    // Check if dropped on rack
+    const rackCell = element.closest('[data-rack-index]');
+    if (rackCell) {
+      const dropIndex = parseInt(rackCell.getAttribute('data-rack-index') || '0');
+      handleTouchDropOnRack(dropIndex);
+    }
+
+    // Check if dropped on rack container (return tile to rack)
+    const rackContainer = element.closest('[data-rack-container]');
+    if (rackContainer && !rackCell) {
+      handleTouchDropOnRack(playerRack.length);
+    }
+
+    setTouchDragTile(null);
+    setTouchMultiTiles(null);
+    setTouchDragPosition(null);
+  }, [touchDragTile, touchMultiTiles, touchDragPosition, playerRack.length]);
+
+  const handleTouchDropOnBoard = useCallback((row: number, col: number) => {
+    if (currentPlayer !== "player" || showTimeoutDialog || timerExpired) return;
+
+    if (touchMultiTiles) {
+      const { tiles, indices } = touchMultiTiles;
+      const newBoard = board.map((r) => [...r]);
+      const newPlacedTiles = [...placedTiles];
+
+      let startCol = col;
+      let startRow = row;
+
+      if (orientation === "horizontal") {
+        const adjustedCol = col - dragOffset;
+
+        // Check for adjacent tiles
+        let leftTile = col;
+        while (leftTile > 0 && board[row][leftTile - 1] !== null) {
+          leftTile--;
+        }
+
+        if (board[row][col] !== null) {
+          startCol = adjustedCol;
+          if (startCol < 0) startCol = 0;
+          if (startCol + tiles.length > BOARD_SIZE)
+            startCol = BOARD_SIZE - tiles.length;
+
+          let blocked = false;
+          for (let i = 0; i < tiles.length; i++) {
+            if (startCol + i >= BOARD_SIZE || board[row][startCol + i] !== null) {
+              blocked = true;
+              break;
+            }
+          }
+
+          if (blocked) {
+            let rightTile = col;
+            while (rightTile < BOARD_SIZE - 1 && board[row][rightTile + 1] !== null) {
+              rightTile++;
+            }
+            startCol = rightTile + 1;
+          }
+        } else {
+          startCol = adjustedCol;
+          if (startCol < 0) startCol = 0;
+          if (startCol + tiles.length > BOARD_SIZE)
+            startCol = BOARD_SIZE - tiles.length;
+        }
+
+        let canPlace = true;
+        for (let i = 0; i < tiles.length; i++) {
+          if (startCol + i >= BOARD_SIZE || newBoard[row][startCol + i] !== null) {
+            canPlace = false;
+            break;
+          }
+        }
+
+        if (!canPlace) {
+          setMessage(getMessage("NotEnoughSpace"));
+          return;
+        }
+
+        tiles.forEach((letter: Letter, i: number) => {
+          newBoard[row][startCol + i] = {
+            letter,
+            score: LETTER_SCORES[letter],
+          };
+          newPlacedTiles.push({ row, col: startCol + i, letter });
+        });
+      } else {
+        // Vertical placement
+        const adjustedRow = row - dragOffset;
+
+        if (board[row][col] !== null) {
+          startRow = adjustedRow;
+          if (startRow < 0) startRow = 0;
+          if (startRow + tiles.length > BOARD_SIZE)
+            startRow = BOARD_SIZE - tiles.length;
+
+          let blocked = false;
+          for (let i = 0; i < tiles.length; i++) {
+            if (startRow + i >= BOARD_SIZE || board[startRow + i][col] !== null) {
+              blocked = true;
+              break;
+            }
+          }
+
+          if (blocked) {
+            let bottomTile = row;
+            while (bottomTile < BOARD_SIZE - 1 && board[bottomTile + 1][col] !== null) {
+              bottomTile++;
+            }
+            startRow = bottomTile + 1;
+          }
+        } else {
+          startRow = adjustedRow;
+          if (startRow < 0) startRow = 0;
+          if (startRow + tiles.length > BOARD_SIZE)
+            startRow = BOARD_SIZE - tiles.length;
+        }
+
+        let canPlace = true;
+        for (let i = 0; i < tiles.length; i++) {
+          if (startRow + i >= BOARD_SIZE || newBoard[startRow + i][col] !== null) {
+            canPlace = false;
+            break;
+          }
+        }
+
+        if (!canPlace) {
+          setMessage(getMessage("NotEnoughSpace"));
+          return;
+        }
+
+        tiles.forEach((letter: Letter, i: number) => {
+          newBoard[startRow + i][col] = {
+            letter,
+            score: LETTER_SCORES[letter],
+          };
+          newPlacedTiles.push({ row: startRow + i, col, letter });
+        });
+      }
+
+      const newRack = playerRack.filter((_, idx) => !indices.includes(idx));
+
+      setBoard(newBoard);
+      setPlayerRack(newRack);
+      setPlacedTiles(newPlacedTiles);
+      setSelectedTiles([]);
+      setMultiSelectMode(false);
+      setOrientation("horizontal");
+      setDragOffset(0);
+      setMessage("");
+      return;
+    }
+
+    if (!touchDragTile || board[row][col] !== null) return;
+
+    const newBoard = board.map((r) => [...r]);
+    newBoard[row][col] = {
+      letter: touchDragTile.letter,
+      score: LETTER_SCORES[touchDragTile.letter],
+    };
+
+    if (touchDragTile.source === "rack" && touchDragTile.index !== undefined) {
+      const newRack = [...playerRack];
+      newRack.splice(touchDragTile.index, 1);
+      setPlayerRack(newRack);
+      setPlacedTiles([
+        ...placedTiles,
+        { row, col, letter: touchDragTile.letter },
+      ]);
+      setBoard(newBoard);
+    } else if (
+      touchDragTile.source === "board" &&
+      touchDragTile.row !== undefined &&
+      touchDragTile.col !== undefined
+    ) {
+      newBoard[touchDragTile.row][touchDragTile.col] = null;
+      setBoard(newBoard);
+      setPlacedTiles(
+        placedTiles.map((t) =>
+          t.row === touchDragTile.row && t.col === touchDragTile.col
+            ? { ...t, row, col }
+            : t,
+        ),
+      );
+    }
+
+    setMessage("");
+  }, [currentPlayer, showTimeoutDialog, timerExpired, touchMultiTiles, touchDragTile, board, placedTiles, playerRack, orientation, dragOffset]);
+
+  const handleTouchDropOnRack = useCallback((dropIndex: number) => {
+    if (currentPlayer !== "player") return;
+
+    if (touchDragTile) {
+      if (
+        touchDragTile.source === "board" &&
+        touchDragTile.row !== undefined &&
+        touchDragTile.col !== undefined
+      ) {
+        const newBoard = board.map((r) => [...r]);
+        newBoard[touchDragTile.row][touchDragTile.col] = null;
+        setBoard(newBoard);
+
+        setPlayerRack([...playerRack, touchDragTile.letter]);
+        setPlacedTiles(
+          placedTiles.filter(
+            (t) => !(t.row === touchDragTile.row && t.col === touchDragTile.col),
+          ),
+        );
+      } else if (
+        touchDragTile.source === "rack" &&
+        touchDragTile.index !== undefined &&
+        !multiSelectMode
+      ) {
+        const newRack = [...playerRack];
+        const [movedTile] = newRack.splice(touchDragTile.index, 1);
+        newRack.splice(dropIndex, 0, movedTile);
+        setPlayerRack(newRack);
+      }
+    }
+  }, [currentPlayer, touchDragTile, board, playerRack, placedTiles, multiSelectMode]);
 
   const handleDropOnBoard = (e: React.DragEvent, row: number, col: number) => {
     e.preventDefault();
@@ -2585,6 +2895,8 @@ const WordGame = () => {
 
             {/* Tile Rack */}
             <div
+              ref={rackRef}
+              data-rack-container
               className={`${boardBg} p-2 sm:p-4 rounded-lg`}
               onDragOver={handleDragOver}
               onDrop={(e) => {
@@ -2634,7 +2946,7 @@ const WordGame = () => {
                     return (
                       <div
                         key={`selected-group-${index}`}
-                        className="flex items-center gap-[1px] sm:gap-0.5 ring-2 sm:ring-4 ring-blue-400 rounded-lg p-[1px] sm:p-0.5 cursor-move relative"
+                        className="flex items-center gap-[1px] sm:gap-0.5 ring-2 sm:ring-4 ring-blue-400 rounded-lg p-[1px] sm:p-0.5 cursor-move relative touch-none"
                         draggable
                         onDragStart={(e) => {
                           const tilesToDrag = selectedTiles.map(
@@ -2649,6 +2961,17 @@ const WordGame = () => {
                           );
                           e.dataTransfer.effectAllowed = "move";
                         }}
+                        onTouchStart={(e) => {
+                          const tilesToDrag = selectedTiles.map(
+                            (i) => playerRack[i],
+                          );
+                          setTouchMultiTiles({ tiles: tilesToDrag, indices: selectedTiles });
+                          setTouchDragTile(null);
+                          const touch = e.touches[0];
+                          setTouchDragPosition({ x: touch.clientX, y: touch.clientY });
+                        }}
+                        onTouchMove={handleTouchMove}
+                        onTouchEnd={handleTouchEnd}
                         onClick={(e) => {
                           // Toggle orientation when clicking on the group (not on individual tiles)
                           if (e.target === e.currentTarget && !timerExpired) {
@@ -2700,6 +3023,7 @@ const WordGame = () => {
                   return (
                     <div
                       key={index}
+                      data-rack-index={index}
                       draggable={!multiSelectMode && !isSwapMode}
                       onMouseDown={() => handleMouseDown(index)}
                       onClick={() => {
@@ -2718,7 +3042,16 @@ const WordGame = () => {
                       onDragEnd={handleDragEnd}
                       onDragOver={handleDragOver}
                       onDrop={(e) => handleDropOnRack(e, index)}
-                      className={`w-10 h-10 sm:w-12 sm:h-12 flex flex-col items-center justify-center rounded-lg font-bold ${
+                      onTouchStart={(e) => {
+                        if (!multiSelectMode && !isSwapMode) {
+                          handleTouchStart(e, letter, "rack", index);
+                        } else if (isSwapMode) {
+                          handleMouseDown(index);
+                        }
+                      }}
+                      onTouchMove={handleTouchMove}
+                      onTouchEnd={handleTouchEnd}
+                      className={`w-10 h-10 sm:w-12 sm:h-12 flex flex-col items-center justify-center rounded-lg font-bold touch-none ${
                         multiSelectMode || isSwapMode
                           ? "cursor-pointer"
                           : "cursor-move"
@@ -3023,6 +3356,7 @@ const WordGame = () => {
           {/* Board Section - Now on Right */}
           <div className="flex-1 flex items-start justify-center lg:justify-start">
             <div
+              ref={boardRef}
               className={`${boardBg} p-1 sm:p-2 rounded-lg overflow-auto max-w-full`}
             >
               <div className="inline-block">
@@ -3064,6 +3398,9 @@ const WordGame = () => {
                       return (
                         <div
                           key={colIndex}
+                          data-board-cell
+                          data-row={rowIndex}
+                          data-col={colIndex}
                           onDragOver={handleDragOver}
                           onDrop={(e) =>
                             handleDropOnBoard(e, rowIndex, colIndex)
@@ -3113,7 +3450,27 @@ const WordGame = () => {
                                   colIndex,
                                 )
                               }
-                              className={`flex flex-col items-center justify-center leading-none ${
+                              onTouchStart={(e) => {
+                                if (
+                                  !showCelebration &&
+                                  placedTiles.some(
+                                    (t) =>
+                                      t.row === rowIndex && t.col === colIndex,
+                                  )
+                                ) {
+                                  handleTouchStart(
+                                    e,
+                                    cell.letter,
+                                    "board",
+                                    undefined,
+                                    rowIndex,
+                                    colIndex,
+                                  );
+                                }
+                              }}
+                              onTouchMove={handleTouchMove}
+                              onTouchEnd={handleTouchEnd}
+                              className={`flex flex-col items-center justify-center leading-none touch-none ${
                                 !showCelebration ? "cursor-move" : ""
                               }`}
                             >
@@ -3204,6 +3561,38 @@ const WordGame = () => {
                 </button>
               </div>
             </div>
+          </div>
+        )}
+
+        {/* Floating touch drag tile */}
+        {touchDragPosition && (touchDragTile || touchMultiTiles) && (
+          <div
+            className="fixed pointer-events-none z-[100]"
+            style={{
+              left: touchDragPosition.x - 24,
+              top: touchDragPosition.y - 24,
+            }}
+          >
+            {touchMultiTiles ? (
+              <div className={`flex ${orientation === 'vertical' ? 'flex-col' : 'flex-row'} gap-1 opacity-90`}>
+                {touchMultiTiles.tiles.map((letter, i) => (
+                  <div
+                    key={i}
+                    className={`w-12 h-12 flex flex-col items-center justify-center rounded-lg font-bold ${tileBg} text-white shadow-lg`}
+                  >
+                    <div className="text-xl leading-none">{letter}</div>
+                    <div className="text-[0.5rem]">{LETTER_SCORES[letter]}</div>
+                  </div>
+                ))}
+              </div>
+            ) : touchDragTile ? (
+              <div
+                className={`w-12 h-12 flex flex-col items-center justify-center rounded-lg font-bold ${tileBg} text-white shadow-lg opacity-90`}
+              >
+                <div className="text-xl leading-none">{touchDragTile.letter}</div>
+                <div className="text-[0.5rem]">{LETTER_SCORES[touchDragTile.letter]}</div>
+              </div>
+            ) : null}
           </div>
         )}
       </div>

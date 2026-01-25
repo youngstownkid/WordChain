@@ -40,3 +40,21 @@ body {
   position: relative;
   z-index: 10;
 }
+
+/* Touch support - prevent text selection and improve touch responsiveness */
+.touch-none {
+  touch-action: none;
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+/* Prevent pull-to-refresh and overscroll on mobile while dragging */
+html, body {
+  overscroll-behavior: none;
+}
+
+/* Ensure draggable tiles have proper touch targets */
+[draggable="true"] {
+  -webkit-user-drag: element;
+}
