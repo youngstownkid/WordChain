@@ -1735,8 +1735,11 @@ const WordGame = () => {
     }
   };
 
-  const calculateScore = (tiles: PlacedTile[]): number => {
+  const calculateScore = (tiles: PlacedTile[], scoreBoard?: (BoardTile | null)[][]): number => {
     if (tiles.length === 0) return 0;
+
+    // Use provided board or fall back to state board
+    const boardToUse = scoreBoard || board;
 
     // Determine if placement is horizontal or vertical
     const rows = tiles.map((t) => t.row);
@@ -1755,8 +1758,8 @@ const WordGame = () => {
       // Extend to find the full main word
       let startCol = minCol;
       let endCol = maxCol;
-      while (startCol > 0 && board[row][startCol - 1] !== null) startCol--;
-      while (endCol < BOARD_SIZE - 1 && board[row][endCol + 1] !== null)
+      while (startCol > 0 && boardToUse[row][startCol - 1] !== null) startCol--;
+      while (endCol < BOARD_SIZE - 1 && boardToUse[row][endCol + 1] !== null)
         endCol++;
 
       // Score the main horizontal word
@@ -1766,7 +1769,7 @@ const WordGame = () => {
 
       if (!scoredWords.has(mainWordKey) && endCol - startCol + 1 > 1) {
         for (let col = startCol; col <= endCol; col++) {
-          const tile = board[row][col];
+          const tile = boardToUse[row][col];
           const isNewTile = tiles.some((t) => t.row === row && t.col === col);
           let letterScore = tile ? tile.score : 0;
 
@@ -1789,11 +1792,11 @@ const WordGame = () => {
       tiles.forEach((tile) => {
         let perpStart = tile.row;
         let perpEnd = tile.row;
-        while (perpStart > 0 && board[perpStart - 1][tile.col] !== null)
+        while (perpStart > 0 && boardToUse[perpStart - 1][tile.col] !== null)
           perpStart--;
         while (
           perpEnd < BOARD_SIZE - 1 &&
-          board[perpEnd + 1][tile.col] !== null
+          boardToUse[perpEnd + 1][tile.col] !== null
         )
           perpEnd++;
 
@@ -1803,7 +1806,7 @@ const WordGame = () => {
           let perpMultiplier = 1;
 
           for (let r = perpStart; r <= perpEnd; r++) {
-            const perpTile = board[r][tile.col];
+            const perpTile = boardToUse[r][tile.col];
             const isNewTile = r === tile.row;
             let letterScore = perpTile ? perpTile.score : 0;
 
@@ -1830,8 +1833,8 @@ const WordGame = () => {
       // Extend to find the full main word
       let startRow = minRow;
       let endRow = maxRow;
-      while (startRow > 0 && board[startRow - 1][col] !== null) startRow--;
-      while (endRow < BOARD_SIZE - 1 && board[endRow + 1][col] !== null)
+      while (startRow > 0 && boardToUse[startRow - 1][col] !== null) startRow--;
+      while (endRow < BOARD_SIZE - 1 && boardToUse[endRow + 1][col] !== null)
         endRow++;
 
       // Score the main vertical word
@@ -1841,7 +1844,7 @@ const WordGame = () => {
 
       if (!scoredWords.has(mainWordKey) && endRow - startRow + 1 > 1) {
         for (let row = startRow; row <= endRow; row++) {
-          const tile = board[row][col];
+          const tile = boardToUse[row][col];
           const isNewTile = tiles.some((t) => t.row === row && t.col === col);
           let letterScore = tile ? tile.score : 0;
 
@@ -1864,11 +1867,11 @@ const WordGame = () => {
       tiles.forEach((tile) => {
         let perpStart = tile.col;
         let perpEnd = tile.col;
-        while (perpStart > 0 && board[tile.row][perpStart - 1] !== null)
+        while (perpStart > 0 && boardToUse[tile.row][perpStart - 1] !== null)
           perpStart--;
         while (
           perpEnd < BOARD_SIZE - 1 &&
-          board[tile.row][perpEnd + 1] !== null
+          boardToUse[tile.row][perpEnd + 1] !== null
         )
           perpEnd++;
 
@@ -1878,7 +1881,7 @@ const WordGame = () => {
           let perpMultiplier = 1;
 
           for (let c = perpStart; c <= perpEnd; c++) {
-            const perpTile = board[tile.row][c];
+            const perpTile = boardToUse[tile.row][c];
             const isNewTile = c === tile.col;
             let letterScore = perpTile ? perpTile.score : 0;
 
@@ -1920,7 +1923,7 @@ const WordGame = () => {
     currentComboTiles: PlacedTile[],
     currentComboStreak: number,
   ): ScoringResult => {
-    const baseScore = calculateScore(tiles);
+    const baseScore = calculateScore(tiles, currentBoard);
     const isRunOut = tiles.length === 7;
     let adjustedBaseScore = baseScore;
 
