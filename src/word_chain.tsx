@@ -607,21 +607,20 @@ const WordGame = () => {
       );
 
       if (validation.valid) {
-        let previewScore = calculateScore(placedTiles);
-        const isRunOut = placedTiles.length === 7;
-
-        if (isRunOut) {
-          previewScore += 50;
-        }
-
+        const scoring = calculateFullScore(board, placedTiles, comboTiles, comboStreak);
         const wordsText = validation.words.join(", ");
-        if (isRunOut) {
-          setMessage(
-            `Preview: ${previewScore} points (${wordsText}) 🎉 RUN OUT! (+50)`,
-          );
-        } else {
-          setMessage(`Preview: ${previewScore} points (${wordsText})`);
+
+        let previewMessage = `Preview: ${scoring.finalScore} points (${wordsText})`;
+
+        if (scoring.isCombo) {
+          previewMessage += ` 🔥 ${scoring.comboMultiplier}x COMBO!`;
         }
+
+        if (scoring.isRunOut) {
+          previewMessage += " 🎉 RUN OUT! (+50)";
+        }
+
+        setMessage(previewMessage);
       }
     };
 
@@ -1903,6 +1902,68 @@ const WordGame = () => {
     return totalScore;
   };
 
+  // Shared scoring result type
+  interface ScoringResult {
+    baseScore: number;
+    finalScore: number;
+    isRunOut: boolean;
+    isCombo: boolean;
+    comboMultiplier: number;
+    newComboStreak: number;
+    allWordPositions: Array<{ row: number; col: number }>;
+  }
+
+  // Unified scoring function for player, opponent, and preview
+  const calculateFullScore = (
+    currentBoard: (BoardTile | null)[][],
+    tiles: PlacedTile[],
+    currentComboTiles: PlacedTile[],
+    currentComboStreak: number,
+  ): ScoringResult => {
+    const baseScore = calculateScore(tiles);
+    const isRunOut = tiles.length === 7;
+    let adjustedBaseScore = baseScore;
+
+    if (isRunOut) {
+      adjustedBaseScore += 50;
+    }
+
+    // Get all tile positions used in the formed words (including existing board tiles)
+    const allWordPositions = getWordTilePositions(currentBoard, tiles);
+
+    // Check for combo - does any tile in the formed words match a combo tile position?
+    let isCombo = false;
+    if (currentComboTiles.length > 0) {
+      for (const pos of allWordPositions) {
+        if (currentComboTiles.some(combo => combo.row === pos.row && combo.col === pos.col)) {
+          isCombo = true;
+          break;
+        }
+      }
+    }
+
+    // Calculate combo multiplier
+    let newComboStreak = 0;
+    let comboMultiplier = 1;
+    let finalScore = adjustedBaseScore;
+
+    if (isCombo) {
+      newComboStreak = currentComboStreak === 0 ? 2 : currentComboStreak + 1;
+      comboMultiplier = newComboStreak;
+      finalScore = adjustedBaseScore * comboMultiplier;
+    }
+
+    return {
+      baseScore: adjustedBaseScore,
+      finalScore,
+      isRunOut,
+      isCombo,
+      comboMultiplier,
+      newComboStreak,
+      allWordPositions,
+    };
+  };
+
   // Unified validation function for both player and opponent
   const validatePlacement = async (
     testBoard: (BoardTile | null)[][],
@@ -2140,6 +2201,88 @@ const WordGame = () => {
     return validatePlacement(board, placedTiles, isFirstMove);
   };
 
+  // Helper function to get all tile positions used in formed words
+  const getWordTilePositions = (
+    testBoard: (BoardTile | null)[][],
+    tiles: PlacedTile[],
+  ): { row: number; col: number }[] => {
+    const positions: { row: number; col: number }[] = [];
+
+    if (tiles.length === 0) return positions;
+
+    const rows = tiles.map((t) => t.row);
+    const cols = tiles.map((t) => t.col);
+    const uniqueRows = new Set(rows);
+    const isHorizontal = uniqueRows.size === 1;
+
+    if (isHorizontal) {
+      const row = rows[0];
+      const minCol = Math.min(...cols);
+      const maxCol = Math.max(...cols);
+
+      // Extend to find full word boundaries
+      let startCol = minCol;
+      let endCol = maxCol;
+      while (startCol > 0 && testBoard[row][startCol - 1] !== null) startCol--;
+      while (endCol < BOARD_SIZE - 1 && testBoard[row][endCol + 1] !== null) endCol++;
+
+      // Add all positions in main word
+      for (let col = startCol; col <= endCol; col++) {
+        positions.push({ row, col });
+      }
+
+      // Check perpendicular words for each placed tile
+      tiles.forEach((tile) => {
+        let perpendicularStart = tile.row;
+        let perpendicularEnd = tile.row;
+        while (perpendicularStart > 0 && testBoard[perpendicularStart - 1][tile.col] !== null) perpendicularStart--;
+        while (perpendicularEnd < BOARD_SIZE - 1 && testBoard[perpendicularEnd + 1][tile.col] !== null) perpendicularEnd++;
+
+        if (perpendicularStart !== perpendicularEnd) {
+          for (let r = perpendicularStart; r <= perpendicularEnd; r++) {
+            if (!positions.some(p => p.row === r && p.col === tile.col)) {
+              positions.push({ row: r, col: tile.col });
+            }
+          }
+        }
+      });
+    } else {
+      // Vertical placement
+      const col = cols[0];
+      const minRow = Math.min(...rows);
+      const maxRow = Math.max(...rows);
+
+      // Extend to find full word boundaries
+      let startRow = minRow;
+      let endRow = maxRow;
+      while (startRow > 0 && testBoard[startRow - 1][col] !== null) startRow--;
+      while (endRow < BOARD_SIZE - 1 && testBoard[endRow + 1][col] !== null) endRow++;
+
+      // Add all positions in main word
+      for (let row = startRow; row <= endRow; row++) {
+        positions.push({ row, col });
+      }
+
+      // Check perpendicular words for each placed tile
+      tiles.forEach((tile) => {
+        let perpendicularStart = tile.col;
+        let perpendicularEnd = tile.col;
+        while (perpendicularStart > 0 && testBoard[tile.row][perpendicularStart - 1] !== null) perpendicularStart--;
+        while (perpendicularEnd < BOARD_SIZE - 1 && testBoard[tile.row][perpendicularEnd + 1] !== null) perpendicularEnd++;
+
+        if (perpendicularStart !== perpendicularEnd) {
+          for (let c = perpendicularStart; c <= perpendicularEnd; c++) {
+            if (!positions.some(p => p.row === tile.row && p.col === c)) {
+              positions.push({ row: tile.row, col: c });
+            }
+          }
+        }
+      });
+    }
+
+    return positions;
+  };
+
   const opponentTurn = async () => {
     setTimeout(async () => {
       const currentBoard = board;
@@ -2334,19 +2477,15 @@ const WordGame = () => {
         });
       });
 
-      let wordScore = calculateScore(opponentPlacedTiles);
-      const isRunOut = validPlacement.wordLength === 7;
+      // Use shared scoring function (opponent doesn't chain combos, so pass empty combo tiles)
+      const scoring = calculateFullScore(newBoard, opponentPlacedTiles, [], 0);
 
-      if (isRunOut) {
-        wordScore += 50;
-      }
-
-      setOpponentScore(opponentScore + wordScore);
+      setOpponentScore(opponentScore + scoring.finalScore);
       setOpponentStats({
         wordsPlayed: opponentStats.wordsPlayed + 1,
-        totalScore: opponentStats.totalScore + wordScore,
-        runOuts: opponentStats.runOuts + (isRunOut ? 1 : 0),
-        bestWordScore: Math.max(opponentStats.bestWordScore, wordScore),
+        totalScore: opponentStats.totalScore + scoring.finalScore,
+        runOuts: opponentStats.runOuts + (scoring.isRunOut ? 1 : 0),
+        bestWordScore: Math.max(opponentStats.bestWordScore, scoring.finalScore),
       });
 
       const usedLetters = validPlacement.word;
@@ -2370,18 +2509,20 @@ const WordGame = () => {
       setConsecutivePasses(0); // Reset consecutive passes counter
       setCurrentPlayer("player");
       setLastPlayedTiles(opponentPlacedTiles);
-      setComboTiles(opponentPlacedTiles); // Set combo tiles for player to chain off
 
-      if (isRunOut) {
-        setMessage(
-          getMessage("OpponentScoredFormat", { score: wordScore.toString() }) +
-            " 🎉 RUN OUT! (+50)",
-        );
-      } else {
-        setMessage(
-          getMessage("OpponentScoredFormat", { score: wordScore.toString() }),
-        );
+      // Set combo tiles to ALL tiles used in the formed words (from scoring result)
+      const allOpponentTilesUsed = scoring.allWordPositions.map(pos => ({
+        row: pos.row,
+        col: pos.col,
+        letter: newBoard[pos.row][pos.col]?.letter as Letter,
+      }));
+      setComboTiles(allOpponentTilesUsed);
+
+      let opponentMessage = getMessage("OpponentScoredFormat", { score: scoring.finalScore.toString() });
+      if (scoring.isRunOut) {
+        opponentMessage += " 🎉 RUN OUT! (+50)";
       }
+      setMessage(opponentMessage);
     }, 1500);
   };
 
@@ -2394,93 +2535,29 @@ const WordGame = () => {
       return;
     }
 
-    let wordScore = calculateScore(placedTiles);
-    const isRunOut = placedTiles.length === 7;
+    // Use shared scoring function
+    const scoring = calculateFullScore(board, placedTiles, comboTiles, comboStreak);
 
-    if (isRunOut) {
-      wordScore += 50;
-    }
-
-    // Check for combo - does the player's word touch any of the combo tiles?
-    let isCombo = false;
-    if (comboTiles.length > 0) {
-      // Check if any placed tile is adjacent to a combo tile
-      for (const placed of placedTiles) {
-        for (const combo of comboTiles) {
-          // Check if tiles are adjacent (horizontally or vertically)
-          const isAdjacent =
-            (placed.row === combo.row && Math.abs(placed.col - combo.col) === 1) ||
-            (placed.col === combo.col && Math.abs(placed.row - combo.row) === 1);
-          // Or if the word uses the same position (extending through the combo tile)
-          const isSamePosition = placed.row === combo.row && placed.col === combo.col;
-          if (isAdjacent || isSamePosition) {
-            isCombo = true;
-            break;
-          }
-        }
-        if (isCombo) break;
-      }
-
-      // Also check if the word formation uses any existing combo tile on the board
-      if (!isCombo) {
-        for (const combo of comboTiles) {
-          // Check if any placed tile forms a word that includes the combo tile position
-          for (const placed of placedTiles) {
-            // Same row - check if combo tile is between or adjacent to the word
-            if (placed.row === combo.row) {
-              const minCol = Math.min(...placedTiles.filter(t => t.row === placed.row).map(t => t.col));
-              const maxCol = Math.max(...placedTiles.filter(t => t.row === placed.row).map(t => t.col));
-              if (combo.col >= minCol - 1 && combo.col <= maxCol + 1) {
-                isCombo = true;
-                break;
-              }
-            }
-            // Same col - check if combo tile is between or adjacent to the word
-            if (placed.col === combo.col) {
-              const minRow = Math.min(...placedTiles.filter(t => t.col === placed.col).map(t => t.row));
-              const maxRow = Math.max(...placedTiles.filter(t => t.col === placed.col).map(t => t.row));
-              if (combo.row >= minRow - 1 && combo.row <= maxRow + 1) {
-                isCombo = true;
-                break;
-              }
-            }
-          }
-          if (isCombo) break;
-        }
-      }
-    }
-
-    // Apply combo multiplier
-    let newComboStreak = 0;
-    let finalScore = wordScore;
-    let comboMultiplier = 1;
-
-    if (isCombo) {
-      newComboStreak = comboStreak === 0 ? 2 : comboStreak + 1;
-      comboMultiplier = newComboStreak;
-      finalScore = wordScore * comboMultiplier;
-    }
-
-    setComboStreak(newComboStreak);
-    setPlayerScore(playerScore + finalScore);
+    setComboStreak(scoring.newComboStreak);
+    setPlayerScore(playerScore + scoring.finalScore);
     setPlayerStats({
       wordsPlayed: playerStats.wordsPlayed + 1,
-      totalScore: playerStats.totalScore + finalScore,
-      runOuts: playerStats.runOuts + (isRunOut ? 1 : 0),
-      bestWordScore: Math.max(playerStats.bestWordScore, finalScore),
+      totalScore: playerStats.totalScore + scoring.finalScore,
+      runOuts: playerStats.runOuts + (scoring.isRunOut ? 1 : 0),
+      bestWordScore: Math.max(playerStats.bestWordScore, scoring.finalScore),
     });
 
     // Build message with combo info
     let scoreMessage = getMessage("ScoreFormat", {
-      score: finalScore.toString(),
+      score: scoring.finalScore.toString(),
       words: validation.words.join(", "),
     });
 
-    if (isCombo) {
-      scoreMessage += ` 🔥 ${comboMultiplier}x COMBO!`;
+    if (scoring.isCombo) {
+      scoreMessage += ` 🔥 ${scoring.comboMultiplier}x COMBO!`;
     }
 
-    if (isRunOut) {
+    if (scoring.isRunOut) {
       scoreMessage += " 🎉 RUN OUT! (+50)";
     }
 
@@ -2493,7 +2570,13 @@ const WordGame = () => {
     setPlayerRack([...playerRack, ...newTiles]);
     setTileBag(remainingBag);
     setLastPlayedTiles(placedTiles);
-    setComboTiles(placedTiles); // Set player's tiles as new combo tiles for next turn
+    // Set all tiles used in the formed words as combo tiles for the next turn (from scoring result)
+    const allTilesUsed = scoring.allWordPositions.map(pos => ({
+      row: pos.row,
+      col: pos.col,
+      letter: (board[pos.row][pos.col]?.letter || placedTiles.find(t => t.row === pos.row && t.col === pos.col)?.letter) as Letter,
+    }));
+    setComboTiles(allTilesUsed);
     setPlacedTiles([]);
     setInvalidTiles([]);
     setIsFirstMove(false);
