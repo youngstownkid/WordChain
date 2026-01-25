@@ -1658,7 +1658,7 @@ const WordGame = () => {
       case "DL":
         return "DL";
       case "center":
-        return <span className="text-2xl sm:text-3xl">🤘🐂🤘</span>;
+        return <span className="text-base sm:text-lg md:text-xl">🤘🐂🤘</span>;
       default:
         return "";
     }
@@ -3405,7 +3405,7 @@ const WordGame = () => {
                           onDrop={(e) =>
                             handleDropOnBoard(e, rowIndex, colIndex)
                           }
-                          className={`w-8 h-8 sm:w-10 sm:h-10 md:w-12 md:h-12 lg:w-9 lg:h-9 xl:w-11 xl:h-11 m-[1px] sm:m-0.5 flex items-center justify-center text-[0.55rem] sm:text-xs md:text-sm lg:text-xs xl:text-sm font-bold rounded cursor-pointer ${
+                          className={`w-6 h-6 sm:w-7 sm:h-7 md:w-9 md:h-9 lg:w-7 lg:h-7 xl:w-8 xl:h-8 m-[0.5px] sm:m-[1px] flex items-center justify-center text-[0.45rem] sm:text-[0.55rem] md:text-xs lg:text-[0.55rem] xl:text-xs font-bold rounded cursor-pointer ${
                             isInvalid
                               ? "bg-red-600"
                               : getSquareStyle(
@@ -3474,10 +3474,10 @@ const WordGame = () => {
                                 !showCelebration ? "cursor-move" : ""
                               }`}
                             >
-                              <div className="text-sm sm:text-lg md:text-xl lg:text-lg xl:text-2xl font-bold leading-none">
+                              <div className="text-xs sm:text-sm md:text-base lg:text-sm xl:text-lg font-bold leading-none">
                                 {cell.letter}
                               </div>
-                              <div className="text-[0.3rem] sm:text-[0.4rem] md:text-[0.45rem] lg:text-[0.4rem] xl:text-[0.45rem]">
+                              <div className="text-[0.2rem] sm:text-[0.25rem] md:text-[0.35rem] lg:text-[0.25rem] xl:text-[0.35rem]">
                                 {cell.score}
                               </div>
                             </div>
