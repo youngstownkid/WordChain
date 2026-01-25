@@ -57,7 +57,7 @@ interface PlacedTile {
 }
 
 interface PlayerStats {
-  wordsPlayed: number;
+  highStreak: number;
   totalScore: number;
   runOuts: number;
   bestWordScore: number;
@@ -443,13 +443,13 @@ const WordGame = () => {
   const [gameStarted, setGameStarted] = useState<boolean>(false);
   const [lastPlayedTiles, setLastPlayedTiles] = useState<PlacedTile[]>([]);
   const [playerStats, setPlayerStats] = useState<PlayerStats>({
-    wordsPlayed: 0,
+    highStreak: 0,
     totalScore: 0,
     runOuts: 0,
     bestWordScore: 0,
   });
   const [opponentStats, setOpponentStats] = useState<PlayerStats>({
-    wordsPlayed: 0,
+    highStreak: 0,
     totalScore: 0,
     runOuts: 0,
     bestWordScore: 0,
@@ -522,6 +522,13 @@ const WordGame = () => {
         setMultiSelectMode(state.multiSelectMode || false);
         setIsSwapMode(state.isSwapMode || false);
         setGameMode(state.gameMode || "normal");
+
+        // Restore combo state
+        setPlayerComboStreak(state.playerComboStreak || 0);
+        setOpponentComboStreak(state.opponentComboStreak || 0);
+        setLastPlayedTiles(state.lastPlayedTiles || []);
+        setLastPlayerTiles(state.lastPlayerTiles || []);
+        setLastOpponentTiles(state.lastOpponentTiles || []);
 
         // Restore timer state directly from saved data
         const savedTimerExpired = state.timerExpired || false;
@@ -663,6 +670,12 @@ const WordGame = () => {
         multiSelectMode,
         isSwapMode,
         gameMode,
+        // Combo state
+        playerComboStreak,
+        opponentComboStreak,
+        lastPlayedTiles,
+        lastPlayerTiles,
+        lastOpponentTiles,
         timestamp: Date.now(), // Timestamp for "Resuming from..." message
       };
       localStorage.setItem("scrabbull-game-state", JSON.stringify(gameState));
@@ -689,6 +702,11 @@ const WordGame = () => {
     multiSelectMode,
     isSwapMode,
     gameMode,
+    playerComboStreak,
+    opponentComboStreak,
+    lastPlayedTiles,
+    lastPlayerTiles,
+    lastOpponentTiles,
   ]);
 
   // Auto-save timer state every second while timer is running
@@ -873,13 +891,13 @@ const WordGame = () => {
     setIsFirstMove(true);
     setLastPlayedTiles([]);
     setPlayerStats({
-      wordsPlayed: 0,
+      highStreak: 0,
       totalScore: 0,
       runOuts: 0,
       bestWordScore: 0,
     });
     setOpponentStats({
-      wordsPlayed: 0,
+      highStreak: 0,
       totalScore: 0,
       runOuts: 0,
       bestWordScore: 0,
@@ -2503,7 +2521,7 @@ const WordGame = () => {
 
       setOpponentScore(opponentScore + scoring.finalScore);
       setOpponentStats({
-        wordsPlayed: opponentStats.wordsPlayed + 1,
+        highStreak: Math.max(opponentStats.highStreak, scoring.newComboStreak),
         totalScore: opponentStats.totalScore + scoring.finalScore,
         runOuts: opponentStats.runOuts + (scoring.isRunOut ? 1 : 0),
         bestWordScore: Math.max(opponentStats.bestWordScore, scoring.finalScore),
@@ -2579,7 +2597,7 @@ const WordGame = () => {
 
     setPlayerScore(playerScore + scoring.finalScore);
     setPlayerStats({
-      wordsPlayed: playerStats.wordsPlayed + 1,
+      highStreak: Math.max(playerStats.highStreak, scoring.newComboStreak),
       totalScore: playerStats.totalScore + scoring.finalScore,
       runOuts: playerStats.runOuts + (scoring.isRunOut ? 1 : 0),
       bestWordScore: Math.max(playerStats.bestWordScore, scoring.finalScore),
@@ -2850,13 +2868,13 @@ const WordGame = () => {
     setIsFirstMove(true);
     setLastPlayedTiles([]);
     setPlayerStats({
-      wordsPlayed: 0,
+      highStreak: 0,
       totalScore: 0,
       runOuts: 0,
       bestWordScore: 0,
     });
     setOpponentStats({
-      wordsPlayed: 0,
+      highStreak: 0,
       totalScore: 0,
       runOuts: 0,
       bestWordScore: 0,
@@ -2892,7 +2910,7 @@ const WordGame = () => {
             <span className="text-2xl sm:text-3xl">🐂</span>
             Word Chain
             <span className="text-[0.5rem] sm:text-xs text-gray-500 font-normal self-end mb-0.5">
-              v26.01.25.18.13
+              v26.01.25.18.22
             </span>
           </h1>
           <div className="flex items-center gap-2">
@@ -3076,20 +3094,9 @@ const WordGame = () => {
                           </div>
                           <div className="space-y-1">
                             <div className="flex justify-between">
-                              <span className="text-gray-400">Words:</span>
+                              <span className="text-gray-400">High Streak:</span>
                               <span className="font-semibold">
-                                {playerStats.wordsPlayed}
-                              </span>
-                            </div>
-                            <div className="flex justify-between">
-                              <span className="text-gray-400">Avg:</span>
-                              <span className="font-semibold">
-                                {playerStats.wordsPlayed > 0
-                                  ? Math.round(
-                                      playerStats.totalScore /
-                                        playerStats.wordsPlayed,
-                                    )
-                                  : 0}
+                                {playerStats.highStreak > 0 ? `${playerStats.highStreak}x` : '-'}
                               </span>
                             </div>
                             <div className="flex justify-between">
@@ -3114,20 +3121,9 @@ const WordGame = () => {
                           </div>
                           <div className="space-y-1">
                             <div className="flex justify-between">
-                              <span className="text-gray-400">Words:</span>
+                              <span className="text-gray-400">High Streak:</span>
                               <span className="font-semibold">
-                                {opponentStats.wordsPlayed}
-                              </span>
-                            </div>
-                            <div className="flex justify-between">
-                              <span className="text-gray-400">Avg:</span>
-                              <span className="font-semibold">
-                                {opponentStats.wordsPlayed > 0
-                                  ? Math.round(
-                                      opponentStats.totalScore /
-                                        opponentStats.wordsPlayed,
-                                    )
-                                  : 0}
+                                {opponentStats.highStreak > 0 ? `${opponentStats.highStreak}x` : '-'}
                               </span>
                             </div>
                             <div className="flex justify-between">
