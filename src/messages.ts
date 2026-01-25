@@ -1,10 +1,16 @@
 // Messages configuration loader
 const MESSAGES_CACHE: Map<string, string> = new Map();
 
+// Get the base URL for assets (handles GitHub Pages deployment)
+const getBaseUrl = (): string => {
+  return import.meta.env.BASE_URL || '/';
+};
+
 // Load messages from configuration file
 export const loadMessages = async (): Promise<void> => {
   try {
-    const response = await fetch('/messages.txt');
+    const baseUrl = getBaseUrl();
+    const response = await fetch(`${baseUrl}messages.txt`);
     const text = await response.text();
 
     const lines = text.split('\n');

@@ -1,6 +1,12 @@
 // Cache for loaded word sets by length
 const WORD_CACHE: Map<number, Set<string>> = new Map();
 
+// Get the base URL for assets (handles GitHub Pages deployment)
+const getBaseUrl = (): string => {
+  // Use import.meta.env.BASE_URL which Vite sets based on the base config
+  return import.meta.env.BASE_URL || '/';
+};
+
 // Load words for a specific length on-demand
 const loadWordsForLength = async (length: number): Promise<Set<string>> => {
   // Check cache first
@@ -11,7 +17,8 @@ const loadWordsForLength = async (length: number): Promise<Set<string>> => {
   const words = new Set<string>();
 
   try {
-    const response = await fetch(`/words/${length}.txt`);
+    const baseUrl = getBaseUrl();
+    const response = await fetch(`${baseUrl}words/${length}.txt`);
     const text = await response.text();
     const wordArray = text.split('\n').map(w => w.trim().toUpperCase()).filter(w => w.length > 0);
     wordArray.forEach(word => words.add(word));
