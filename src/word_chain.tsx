@@ -2520,15 +2520,14 @@ const WordGame = () => {
       setIsFirstMove(false);
       setConsecutivePasses(0); // Reset consecutive passes counter
       setCurrentPlayer("player");
-      setLastPlayedTiles(opponentPlacedTiles);
-
-      // Set all tiles used in the formed words for player to potentially chain off
+      // Set all tiles used in the formed words for display and player to potentially chain off
       const allOpponentTilesUsed = scoring.allWordPositions.map(pos => ({
         row: pos.row,
         col: pos.col,
         letter: newBoard[pos.row][pos.col]?.letter as Letter,
       }));
-      setLastOpponentTiles(allOpponentTilesUsed);
+      setLastPlayedTiles(allOpponentTilesUsed); // For board display
+      setLastOpponentTiles(allOpponentTilesUsed); // For player's combo detection
 
       let opponentMessage = getMessage("OpponentScoredFormat", { score: scoring.finalScore.toString() });
       if (scoring.isCombo) {
@@ -2590,14 +2589,14 @@ const WordGame = () => {
 
     setPlayerRack([...playerRack, ...newTiles]);
     setTileBag(remainingBag);
-    setLastPlayedTiles(placedTiles);
-    // Set all tiles used in the formed words for opponent to potentially chain off
+    // Set all tiles used in the formed words for display and opponent to potentially chain off
     const allTilesUsed = scoring.allWordPositions.map(pos => ({
       row: pos.row,
       col: pos.col,
       letter: (board[pos.row][pos.col]?.letter || placedTiles.find(t => t.row === pos.row && t.col === pos.col)?.letter) as Letter,
     }));
-    setLastPlayerTiles(allTilesUsed);
+    setLastPlayedTiles(allTilesUsed); // For board display
+    setLastPlayerTiles(allTilesUsed); // For opponent's combo detection
     setPlacedTiles([]);
     setInvalidTiles([]);
     setIsFirstMove(false);
@@ -3642,10 +3641,10 @@ const WordGame = () => {
                       const isLastPlayed = lastPlayedTiles.some(
                         (t) => t.row === rowIndex && t.col === colIndex,
                       );
-                      // Show combo tiles based on whose turn it is
-                      const isComboTile = currentPlayer === "player"
-                        ? lastOpponentTiles.some((t) => t.row === rowIndex && t.col === colIndex)
-                        : lastPlayerTiles.some((t) => t.row === rowIndex && t.col === colIndex);
+                      // Show combo tiles - always show the tiles from the most recent word played
+                      const isComboTile = lastPlayedTiles.some(
+                        (t) => t.row === rowIndex && t.col === colIndex,
+                      );
 
                       // Generate random animation parameters for each tile
                       const animationDelay =
