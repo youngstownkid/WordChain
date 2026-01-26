@@ -490,7 +490,8 @@ const WordGame = () => {
   const [showPassWarning, setShowPassWarning] = useState<boolean>(false); // Shows warning before final pass
   const [showQuitConfirm, setShowQuitConfirm] = useState<boolean>(false); // Shows quit confirmation dialog
   const [showGameOverDialog, setShowGameOverDialog] = useState<boolean>(false); // Shows game over dialog with stats
-  const [careerStats, setCareerStats] = useState<CareerStats>(DEFAULT_CAREER_STATS); // Career stats
+  const [careerStats, setCareerStats] =
+    useState<CareerStats>(DEFAULT_CAREER_STATS); // Career stats
   const [statsExpanded, setStatsExpanded] = useState<boolean>(false); // Details section collapsed by default
   const [playerComboStreak, setPlayerComboStreak] = useState<number>(0); // Player's combo streak (0 = no combo, 2+ = active)
   const [opponentComboStreak, setOpponentComboStreak] = useState<number>(0); // Opponent's combo streak (0 = no combo, 2+ = active)
@@ -2467,15 +2468,29 @@ const WordGame = () => {
       const centerSquare = Math.floor(BOARD_SIZE / 2);
       const isBoardEmpty = currentBoard[centerSquare][centerSquare] === null;
 
-      // Determine word length based on difficulty
+      // Determine search parameters based on difficulty
+      // All levels now search more thoroughly for better play
       let maxWordLength: number;
+      let searchLimit: number;
+      let randomnessFactor: number; // 0 = always best, 1 = very random
+
       if (difficulty === "beginner") {
-        maxWordLength = Math.min(5, currentOpponentRack.length);
+        maxWordLength = Math.min(6, currentOpponentRack.length + 3); // Can use board letters
+        searchLimit = 30;
+        randomnessFactor = 0.3; // 30% chance of suboptimal
       } else if (difficulty === "intermediate") {
-        maxWordLength = Math.min(6, currentOpponentRack.length);
+        maxWordLength = Math.min(7, currentOpponentRack.length + 4);
+        searchLimit = 75;
+        randomnessFactor = 0.15; // 15% chance of suboptimal
+      } else if (difficulty === "advanced") {
+        maxWordLength = Math.min(7, currentOpponentRack.length + 5);
+        searchLimit = 150;
+        randomnessFactor = 0.05; // 5% chance of suboptimal
       } else {
-        // advanced and expert
-        maxWordLength = Math.min(7, currentOpponentRack.length);
+        // expert
+        maxWordLength = Math.min(7, currentOpponentRack.length + 6);
+        searchLimit = 300;
+        randomnessFactor = 0; // Always optimal
       }
 
       // Find all valid words that can be formed from the rack
@@ -2485,19 +2500,11 @@ const WordGame = () => {
         maxWordLength,
       );
 
-      // Shuffle words but keep longer words first (they score more)
+      // Sort words by length (longest first) - longer words generally score more
       const shuffledWords = possibleWords.sort((a, b) => {
         if (b.length !== a.length) return b.length - a.length;
         return Math.random() - 0.5;
       });
-
-      // For beginner difficulty, prefer shorter words
-      if (difficulty === "beginner") {
-        shuffledWords.sort((a, b) => {
-          if (a.length !== b.length) return a.length - b.length;
-          return Math.random() - 0.5;
-        });
-      }
 
       // Helper to check if a placement touches lastPlayedTiles (for combo)
       const touchesLastPlayedTiles = (
@@ -2611,48 +2618,98 @@ const WordGame = () => {
       };
       const allValidPlacements: ValidPlacementInfo[] = [];
 
+      // Helper to check if we can form a word at a position using rack + board letters
+      const canFormWordAt = (
+        word: Letter[],
+        startRow: number,
+        startCol: number,
+        isHorizontal: boolean,
+      ): { canForm: boolean; tilesNeeded: Letter[] } => {
+        const tilesNeeded: Letter[] = [];
+        const rackCopy = [...currentOpponentRack];
+
+        for (let i = 0; i < word.length; i++) {
+          const r = isHorizontal ? startRow : startRow + i;
+          const c = isHorizontal ? startCol + i : startCol;
+
+          if (r < 0 || r >= BOARD_SIZE || c < 0 || c >= BOARD_SIZE) {
+            return { canForm: false, tilesNeeded: [] };
+          }
+
+          const boardTile = currentBoard[r][c];
+          if (boardTile !== null) {
+            // Board already has a letter here - must match
+            if (boardTile.letter !== word[i]) {
+              return { canForm: false, tilesNeeded: [] };
+            }
+            // Using board letter, don't need from rack
+          } else {
+            // Need to place this letter from rack
+            const rackIdx = rackCopy.indexOf(word[i]);
+            if (rackIdx === -1) {
+              return { canForm: false, tilesNeeded: [] };
+            }
+            rackCopy.splice(rackIdx, 1);
+            tilesNeeded.push(word[i]);
+          }
+        }
+
+        // Must use at least one tile from rack
+        if (tilesNeeded.length === 0) {
+          return { canForm: false, tilesNeeded: [] };
+        }
+
+        return { canForm: true, tilesNeeded };
+      };
+
       // Try each word from the dictionary
       for (const wordStr of shuffledWords) {
         const wordLength = wordStr.length;
         const word = wordStr.split("") as Letter[];
 
-        // Collect all possible spots for this word length (both orientations)
+        // Collect all possible spots for this word (both orientations)
+        // Now supports using existing board letters!
         type SpotInfo = {
           row: number;
           col: number;
           isHorizontal: boolean;
           isCombo: boolean;
+          tilesNeeded: Letter[];
         };
         const spots: SpotInfo[] = [];
 
         // Horizontal spots
         for (let r = 0; r < BOARD_SIZE; r++) {
           for (let c = 0; c <= BOARD_SIZE - wordLength; c++) {
-            let allEmpty = true;
-            for (let i = 0; i < wordLength; i++) {
-              if (currentBoard[r][c + i] !== null) {
-                allEmpty = false;
-                break;
+            const { canForm, tilesNeeded } = canFormWordAt(word, r, c, true);
+            if (!canForm) continue;
+
+            if (isBoardEmpty) {
+              // First move - must touch center
+              const center = Math.floor(BOARD_SIZE / 2);
+              if (r === center && c <= center && c + wordLength - 1 >= center) {
+                spots.push({
+                  row: r,
+                  col: c,
+                  isHorizontal: true,
+                  isCombo: false,
+                  tilesNeeded,
+                });
               }
-            }
-            if (allEmpty) {
-              if (isBoardEmpty) {
-                const center = Math.floor(BOARD_SIZE / 2);
-                if (
-                  r === center &&
-                  c <= center &&
-                  c + wordLength - 1 >= center
-                ) {
-                  spots.push({
-                    row: r,
-                    col: c,
-                    isHorizontal: true,
-                    isCombo: false,
-                  });
-                }
-              } else if (touchesExistingTile(r, c, wordLength)) {
+            } else {
+              // Must connect to existing tiles OR use existing tiles
+              const usesExistingTile = tilesNeeded.length < wordLength;
+              const touchesExisting = touchesExistingTile(r, c, wordLength);
+
+              if (usesExistingTile || touchesExisting) {
                 const isCombo = touchesLastPlayedTiles(r, c, wordLength, true);
-                spots.push({ row: r, col: c, isHorizontal: true, isCombo });
+                spots.push({
+                  row: r,
+                  col: c,
+                  isHorizontal: true,
+                  isCombo,
+                  tilesNeeded,
+                });
               }
             }
           }
@@ -2661,31 +2718,35 @@ const WordGame = () => {
         // Vertical spots
         for (let r = 0; r <= BOARD_SIZE - wordLength; r++) {
           for (let c = 0; c < BOARD_SIZE; c++) {
-            let allEmpty = true;
-            for (let i = 0; i < wordLength; i++) {
-              if (currentBoard[r + i][c] !== null) {
-                allEmpty = false;
-                break;
+            const { canForm, tilesNeeded } = canFormWordAt(word, r, c, false);
+            if (!canForm) continue;
+
+            if (isBoardEmpty) {
+              // First move - must touch center
+              const center = Math.floor(BOARD_SIZE / 2);
+              if (c === center && r <= center && r + wordLength - 1 >= center) {
+                spots.push({
+                  row: r,
+                  col: c,
+                  isHorizontal: false,
+                  isCombo: false,
+                  tilesNeeded,
+                });
               }
-            }
-            if (allEmpty) {
-              if (isBoardEmpty) {
-                const center = Math.floor(BOARD_SIZE / 2);
-                if (
-                  c === center &&
-                  r <= center &&
-                  r + wordLength - 1 >= center
-                ) {
-                  spots.push({
-                    row: r,
-                    col: c,
-                    isHorizontal: false,
-                    isCombo: false,
-                  });
-                }
-              } else if (touchesExistingTileVertical(r, c, wordLength)) {
+            } else {
+              // Must connect to existing tiles OR use existing tiles
+              const usesExistingTile = tilesNeeded.length < wordLength;
+              const touchesExisting = touchesExistingTileVertical(r, c, wordLength);
+
+              if (usesExistingTile || touchesExisting) {
                 const isCombo = touchesLastPlayedTiles(r, c, wordLength, false);
-                spots.push({ row: r, col: c, isHorizontal: false, isCombo });
+                spots.push({
+                  row: r,
+                  col: c,
+                  isHorizontal: false,
+                  isCombo,
+                  tilesNeeded,
+                });
               }
             }
           }
@@ -2696,15 +2757,24 @@ const WordGame = () => {
           const testBoard = currentBoard.map((r) => [...r]);
           const testTiles: PlacedTile[] = [];
 
+          // Only place tiles that aren't already on the board
           word.forEach((letter, i) => {
             const r = spot.isHorizontal ? spot.row : spot.row + i;
             const c = spot.isHorizontal ? spot.col + i : spot.col;
-            testBoard[r][c] = {
-              letter,
-              score: LETTER_SCORES[letter],
-            };
-            testTiles.push({ row: r, col: c, letter });
+
+            // Only add to testTiles if this position is empty (we're placing a new tile)
+            if (currentBoard[r][c] === null) {
+              testBoard[r][c] = {
+                letter,
+                score: LETTER_SCORES[letter],
+              };
+              testTiles.push({ row: r, col: c, letter });
+            }
+            // If board already has the letter, testBoard already has it from the copy
           });
+
+          // Skip if no new tiles would be placed
+          if (testTiles.length === 0) continue;
 
           const validation = await validatePlacement(
             testBoard,
@@ -2713,21 +2783,42 @@ const WordGame = () => {
           );
 
           if (validation.valid) {
-            // Calculate score for this placement
+            // Calculate ACTUAL game score for this placement
+            const placementScoring = calculateFullScore(
+              testBoard,
+              testTiles,
+              currentLastPlayedTiles,
+              opponentComboStreak,
+            );
+
             const exposedEdges = countExposedEdges(testBoard, testTiles);
             const isDefensiveMode =
               difficulty === "advanced" || difficulty === "expert";
 
-            // Score formula: COMBO is most important (10000 points)
-            // Then word length (for scoring), then defensive considerations
+            // Score formula prioritizes:
+            // 1. Combo plays (massive bonus - this is the main goal!)
+            // 2. Actual game score (including premium squares and cross-words)
+            // 3. Defensive considerations (fewer exposed edges)
             let score = 0;
+
+            // Combo is CRITICAL - multiply base importance by current streak potential
             if (spot.isCombo) {
-              score += 10000; // Huge bonus for combo - this is the main goal!
+              const comboMultiplier = opponentComboStreak === 0
+                ? 2 // Starting a new combo
+                : opponentComboStreak + placementScoring.comboWordCount; // Continuing combo
+              score += 50000 * comboMultiplier; // Massive combo bonus
             }
-            score += wordLength * 100; // Longer words score more
+
+            // Add actual game score (this includes premium squares, cross-words, etc.)
+            score += placementScoring.finalScore * 10;
+
+            // Defensive bonus - fewer exposed edges is better
             if (isDefensiveMode) {
-              score += 50 - exposedEdges; // Defensive bonus
+              score += (20 - exposedEdges) * 5;
             }
+
+            // Bonus for using more tiles (closer to run-out)
+            score += wordLength * 50;
 
             allValidPlacements.push({
               spot: { row: spot.row, col: spot.col },
@@ -2738,31 +2829,15 @@ const WordGame = () => {
               score,
             });
 
-            // For beginner, limit search to avoid long computation
-            if (difficulty === "beginner" && allValidPlacements.length >= 10) {
+            // Stop if we've collected enough placements
+            if (allValidPlacements.length >= searchLimit) {
               break;
             }
           }
         }
 
-        // For beginner, stop after finding some valid placements
-        if (difficulty === "beginner" && allValidPlacements.length >= 10) {
-          break;
-        }
-
-        // For intermediate, collect more but not exhaustively
-        if (
-          difficulty === "intermediate" &&
-          allValidPlacements.length >= 20
-        ) {
-          break;
-        }
-
-        // For advanced/expert, collect more options (up to 50)
-        if (
-          (difficulty === "advanced" || difficulty === "expert") &&
-          allValidPlacements.length >= 50
-        ) {
+        // Stop if we've collected enough placements
+        if (allValidPlacements.length >= searchLimit) {
           break;
         }
       }
@@ -2772,27 +2847,18 @@ const WordGame = () => {
         // Sort by score (highest first)
         allValidPlacements.sort((a, b) => b.score - a.score);
 
-        // For beginner, sometimes pick a suboptimal choice (more randomness)
+        // Apply randomness factor based on difficulty
         let selectedIndex = 0;
-        if (difficulty === "beginner" && allValidPlacements.length > 1) {
-          // 40% chance to pick from top 3 instead of the best
-          if (Math.random() < 0.4) {
-            selectedIndex = Math.floor(
-              Math.random() * Math.min(3, allValidPlacements.length),
+        if (randomnessFactor > 0 && allValidPlacements.length > 1) {
+          if (Math.random() < randomnessFactor) {
+            // Pick from top 3-5 instead of the absolute best
+            const topN = Math.min(
+              difficulty === "beginner" ? 5 : 3,
+              allValidPlacements.length,
             );
-          }
-        } else if (
-          difficulty === "intermediate" &&
-          allValidPlacements.length > 1
-        ) {
-          // 20% chance to pick from top 2
-          if (Math.random() < 0.2) {
-            selectedIndex = Math.floor(
-              Math.random() * Math.min(2, allValidPlacements.length),
-            );
+            selectedIndex = Math.floor(Math.random() * topN);
           }
         }
-        // Advanced/Expert always pick the best
 
         const best = allValidPlacements[selectedIndex];
         validPlacement = {
@@ -2922,7 +2988,7 @@ const WordGame = () => {
         return;
       }
 
-      // Apply the valid placement
+      // Apply the valid placement - only place tiles that aren't already on board
       const newBoard = currentBoard.map((r) => [...r]);
       const opponentPlacedTiles: PlacedTile[] = [];
 
@@ -2933,15 +2999,19 @@ const WordGame = () => {
         const col = validPlacement.isHorizontal
           ? validPlacement.spot.col + i
           : validPlacement.spot.col;
-        newBoard[row][col] = {
-          letter: letter as Letter,
-          score: LETTER_SCORES[letter as Letter],
-        };
-        opponentPlacedTiles.push({
-          row,
-          col,
-          letter: letter as Letter,
-        });
+
+        // Only place tile if position is empty (not using existing board letter)
+        if (currentBoard[row][col] === null) {
+          newBoard[row][col] = {
+            letter: letter as Letter,
+            score: LETTER_SCORES[letter as Letter],
+          };
+          opponentPlacedTiles.push({
+            row,
+            col,
+            letter: letter as Letter,
+          });
+        }
       });
 
       // Use shared scoring function - opponent chains off the last played tiles (by either player)
@@ -2988,6 +3058,7 @@ const WordGame = () => {
       setTileBag(remainingBag);
       setIsFirstMove(false);
       setOpponentConsecutivePasses(0); // Reset consecutive passes counter
+      setPlayerConsecutivePasses(0); // Reset player's counter too since a word was played
       setCurrentPlayer("player");
       // Set all tiles used in the formed words for display and combo chaining
       const allOpponentTilesUsed = scoring.allWordPositions.map((pos) => ({
@@ -3111,12 +3182,21 @@ const WordGame = () => {
         gamesPlayed: careerStats.gamesPlayed + 1,
         gamesWon: careerStats.gamesWon + (won ? 1 : 0),
         bestGameScore: Math.max(careerStats.bestGameScore, finalPlayerScore),
-        bestWordScore: Math.max(careerStats.bestWordScore, finalPlayerStats.bestWordScore),
-        bestComboStreak: Math.max(careerStats.bestComboStreak, finalPlayerStats.highStreak),
+        bestWordScore: Math.max(
+          careerStats.bestWordScore,
+          finalPlayerStats.bestWordScore,
+        ),
+        bestComboStreak: Math.max(
+          careerStats.bestComboStreak,
+          finalPlayerStats.highStreak,
+        ),
         careerRunOuts: careerStats.careerRunOuts + finalPlayerStats.runOuts,
       };
       setCareerStats(newCareerStats);
-      localStorage.setItem("wordchain-career-stats", JSON.stringify(newCareerStats));
+      localStorage.setItem(
+        "wordchain-career-stats",
+        JSON.stringify(newCareerStats),
+      );
       setShowGameOverDialog(true);
       return;
     }
@@ -3125,6 +3205,7 @@ const WordGame = () => {
     setTimeRemaining(timerDuration); // Reset timer to full duration
     setGameMode("normal"); // Reset game mode
     setPlayerConsecutivePasses(0); // Reset consecutive passes counter
+    setOpponentConsecutivePasses(0); // Reset opponent's counter too since a word was played
     setCurrentPlayer("opponent");
 
     // Pass the updated board and lastPlayedTiles to avoid stale closure issues
@@ -3247,38 +3328,34 @@ const WordGame = () => {
   };
 
   const pass = () => {
+    // If tiles are placed, we need to clear them from the board
+    // and pass the cleaned board to opponent to avoid stale closure issues
+    let cleanedBoard = board;
     if (placedTiles.length > 0) {
-      recall();
+      // Create a clean board without the placed tiles
+      cleanedBoard = board.map((r) => [...r]);
+      placedTiles.forEach(({ row, col }) => {
+        cleanedBoard[row][col] = null;
+      });
+      // Return tiles to rack
+      const lettersToReturn = placedTiles.map((t) => t.letter);
+      setBoard(cleanedBoard);
+      setPlayerRack([...playerRack, ...lettersToReturn]);
+      setPlacedTiles([]);
+      setInvalidTiles([]);
     }
 
-    // Check if this is the 6th consecutive pass (3 for each player)
-    const newConsecutivePasses = opponentConsecutivePasses + 1;
+    // Increment player's consecutive pass counter
+    const newPlayerPasses = playerConsecutivePasses + 1;
 
-    if (newConsecutivePasses >= 6) {
-      // End the game after 6 consecutive passes
-      setGameEnded(true);
-      setPlayerConsecutivePasses(0);
-      const won = playerScore > opponentScore;
-      setMessage(
-        "Game Over! Both players passed 3 times consecutively. " +
-          (won
-            ? "You win! 🎉"
-            : opponentScore > playerScore
-              ? "Opponent wins!"
-              : "It's a tie!"),
-      );
-      localStorage.removeItem("scrabbull-game-state");
-      endGameWithStats(won);
-      return;
-    }
-
-    if (newConsecutivePasses === 5) {
-      // This is the player's 3rd consecutive pass - show warning
+    // If this would be player's 3rd pass and opponent has already passed 3 times, show warning
+    // (The warning dialog will call confirmPass() to actually end the game)
+    if (newPlayerPasses >= 3 && opponentConsecutivePasses >= 3) {
       setShowPassWarning(true);
       return;
     }
 
-    setPlayerConsecutivePasses(newConsecutivePasses);
+    setPlayerConsecutivePasses(newPlayerPasses);
     setMessage("Turn passed.");
     setTimerExpired(false); // Reset timer expired flag for next turn
     setTimeRemaining(timerDuration); // Reset timer to full duration
@@ -3286,7 +3363,8 @@ const WordGame = () => {
     setGameMode("normal"); // Reset game mode
     // Passing doesn't change lastPlayedTiles - opponent can still chain off them
     setCurrentPlayer("opponent");
-    setTimeout(() => opponentTurn(), 1000);
+    // Pass the cleaned board to avoid stale closure issues
+    setTimeout(() => opponentTurn(cleanedBoard), 1000);
   };
 
   // Update career stats and show game over dialog
@@ -3295,12 +3373,21 @@ const WordGame = () => {
       gamesPlayed: careerStats.gamesPlayed + 1,
       gamesWon: careerStats.gamesWon + (won ? 1 : 0),
       bestGameScore: Math.max(careerStats.bestGameScore, playerScore),
-      bestWordScore: Math.max(careerStats.bestWordScore, playerStats.bestWordScore),
-      bestComboStreak: Math.max(careerStats.bestComboStreak, playerStats.highStreak),
+      bestWordScore: Math.max(
+        careerStats.bestWordScore,
+        playerStats.bestWordScore,
+      ),
+      bestComboStreak: Math.max(
+        careerStats.bestComboStreak,
+        playerStats.highStreak,
+      ),
       careerRunOuts: careerStats.careerRunOuts + playerStats.runOuts,
     };
     setCareerStats(newCareerStats);
-    localStorage.setItem("wordchain-career-stats", JSON.stringify(newCareerStats));
+    localStorage.setItem(
+      "wordchain-career-stats",
+      JSON.stringify(newCareerStats),
+    );
     setShowGameOverDialog(true);
   };
 
@@ -3309,6 +3396,7 @@ const WordGame = () => {
     setShowPassWarning(false);
     setGameEnded(true);
     setPlayerConsecutivePasses(0);
+    setOpponentConsecutivePasses(0);
     const won = playerScore > opponentScore;
     setMessage(
       "Game Over! Both players passed 3 times consecutively. " +
@@ -3372,6 +3460,7 @@ const WordGame = () => {
       runOuts: 0,
       bestWordScore: 0,
     });
+
     setGameEnded(false);
     setShowCelebration(false);
     setShowTimeoutDialog(false);
@@ -3383,6 +3472,8 @@ const WordGame = () => {
       clearInterval(timerInterval);
       setTimerInterval(null);
     }
+    setPlayerConsecutivePasses(0);
+    setOpponentConsecutivePasses(0);
     setTimeRemaining(0);
     setMessage("");
     setPlayerComboStreak(0);
@@ -3712,7 +3803,7 @@ const WordGame = () => {
               <div className="text-xs sm:text-sm mb-2 flex items-center justify-between gap-2">
                 <span className="font-semibold">Your Tiles</span>
                 <span
-                  className={`text-right truncate ${darkMode ? "text-blue-400" : "text-blue-600"}`}
+                  className={`text-right truncate ${darkMode ? "text-yellow-400" : "text-gray-600"}`}
                 >
                   {message || (!gameStarted ? "Tap ▶ to start" : "")}
                 </span>
@@ -3872,7 +3963,8 @@ const WordGame = () => {
               </div>
             </div>
 
-            {/* Action Buttons */}
+            {/* Action Buttons - Only show when game is active */}
+            {gameStarted && !gameEnded && (
             <div className="flex flex-col gap-2">
               {/* Top row: Conditional buttons based on game mode */}
               <div className="flex gap-2">
@@ -4144,6 +4236,7 @@ const WordGame = () => {
                 </div>
               )}
             </div>
+            )}
           </div>
 
           {/* Board Section - Now on Right */}
@@ -4368,9 +4461,7 @@ const WordGame = () => {
         {showQuitConfirm && (
           <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
             <div className={`${boardBg} p-6 rounded-lg max-w-md w-full`}>
-              <h2 className="text-xl font-bold mb-4 text-center">
-                Quit Game?
-              </h2>
+              <h2 className="text-xl font-bold mb-4 text-center">Quit Game?</h2>
               <p className="mb-6 text-center">
                 Are you sure you want to quit the current game? Your progress
                 will be lost.
@@ -4419,16 +4510,22 @@ const WordGame = () => {
               </p>
 
               {/* This Game Stats */}
-              <div className={`${darkMode ? "bg-gray-700" : "bg-gray-100"} p-3 rounded-lg mb-4`}>
+              <div
+                className={`${darkMode ? "bg-gray-700" : "bg-gray-100"} p-3 rounded-lg mb-4`}
+              >
                 <h3 className="font-semibold mb-2 text-center">This Game</h3>
                 <div className="grid grid-cols-2 gap-2 text-sm">
                   <div className="flex justify-between">
                     <span>Best Word:</span>
-                    <span className="font-semibold">{playerStats.bestWordScore}</span>
+                    <span className="font-semibold">
+                      {playerStats.bestWordScore}
+                    </span>
                   </div>
                   <div className="flex justify-between">
                     <span>Best Streak:</span>
-                    <span className="font-semibold">{playerStats.highStreak}x</span>
+                    <span className="font-semibold">
+                      {playerStats.highStreak}x
+                    </span>
                   </div>
                   <div className="flex justify-between">
                     <span>Run Outs:</span>
@@ -4442,32 +4539,46 @@ const WordGame = () => {
               </div>
 
               {/* Career Stats */}
-              <div className={`${darkMode ? "bg-blue-900" : "bg-blue-100"} p-3 rounded-lg mb-4`}>
+              <div
+                className={`${darkMode ? "bg-blue-900" : "bg-blue-100"} p-3 rounded-lg mb-4`}
+              >
                 <h3 className="font-semibold mb-2 text-center">Career Stats</h3>
                 <div className="grid grid-cols-2 gap-2 text-sm">
                   <div className="flex justify-between">
                     <span>Games Played:</span>
-                    <span className="font-semibold">{careerStats.gamesPlayed}</span>
+                    <span className="font-semibold">
+                      {careerStats.gamesPlayed}
+                    </span>
                   </div>
                   <div className="flex justify-between">
                     <span>Games Won:</span>
-                    <span className="font-semibold">{careerStats.gamesWon}</span>
+                    <span className="font-semibold">
+                      {careerStats.gamesWon}
+                    </span>
                   </div>
                   <div className="flex justify-between">
                     <span>Best Game:</span>
-                    <span className="font-semibold">{careerStats.bestGameScore}</span>
+                    <span className="font-semibold">
+                      {careerStats.bestGameScore}
+                    </span>
                   </div>
                   <div className="flex justify-between">
                     <span>Best Word:</span>
-                    <span className="font-semibold">{careerStats.bestWordScore}</span>
+                    <span className="font-semibold">
+                      {careerStats.bestWordScore}
+                    </span>
                   </div>
                   <div className="flex justify-between">
                     <span>Best Streak:</span>
-                    <span className="font-semibold">{careerStats.bestComboStreak}x</span>
+                    <span className="font-semibold">
+                      {careerStats.bestComboStreak}x
+                    </span>
                   </div>
                   <div className="flex justify-between">
                     <span>Run Outs:</span>
-                    <span className="font-semibold">{careerStats.careerRunOuts}</span>
+                    <span className="font-semibold">
+                      {careerStats.careerRunOuts}
+                    </span>
                   </div>
                 </div>
               </div>
