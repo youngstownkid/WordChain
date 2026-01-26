@@ -3157,7 +3157,7 @@ const WordGame = () => {
             <span className="text-2xl sm:text-3xl">🐂</span>
             Word Chain
             <span className="text-[0.5rem] sm:text-xs text-gray-500 font-normal self-end mb-0.5">
-              v26.01.25.22.42
+              v{__APP_VERSION__}
             </span>
           </h1>
           <div className="flex items-center gap-2">
