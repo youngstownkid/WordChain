@@ -50,3 +50,39 @@ export const isValidWord = async (word: string): Promise<boolean> => {
 
   return wordsForLength.has(upperWord);
 };
+
+// Find all valid words that can be formed from a set of letters
+export const findWordsFromLetters = async (
+  letters: string[],
+  minLength: number = 2,
+  maxLength: number = 7,
+): Promise<string[]> => {
+  const results: string[] = [];
+  const availableLetters = letters.map((l) => l.toUpperCase());
+
+  // Check each word length
+  for (let len = Math.min(maxLength, letters.length); len >= minLength; len--) {
+    const wordsForLength = await loadWordsForLength(len);
+
+    for (const word of wordsForLength) {
+      // Check if word can be formed from available letters
+      const lettersCopy = [...availableLetters];
+      let canForm = true;
+
+      for (const char of word) {
+        const idx = lettersCopy.indexOf(char);
+        if (idx === -1) {
+          canForm = false;
+          break;
+        }
+        lettersCopy.splice(idx, 1); // Remove used letter
+      }
+
+      if (canForm) {
+        results.push(word);
+      }
+    }
+  }
+
+  return results;
+};

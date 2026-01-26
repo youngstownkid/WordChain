@@ -14,7 +14,7 @@ import {
   ChevronDown,
   ChevronUp,
 } from "lucide-react";
-import { loadWordList, isValidWord } from "./wordlist";
+import { loadWordList, isValidWord, findWordsFromLetters } from "./wordlist";
 import { loadMessages, getMessage } from "./messages";
 
 type Letter =
@@ -2414,69 +2414,114 @@ const WordGame = () => {
 
       // Determine word length based on difficulty
       let maxWordLength: number;
-      let maxAttempts = 50;
       if (difficulty === "beginner") {
         maxWordLength = Math.min(5, opponentRack.length);
-        maxAttempts = 25000;
       } else if (difficulty === "intermediate") {
         maxWordLength = Math.min(6, opponentRack.length);
-        maxAttempts = 25000;
-      } else if (difficulty === "advanced") {
-        maxWordLength = Math.min(7, opponentRack.length);
-        maxAttempts = 25000;
       } else {
-        // expert
+        // advanced and expert
         maxWordLength = Math.min(7, opponentRack.length);
-        maxAttempts = 50000;
       }
 
+      // Find all valid words that can be formed from the rack
+      const possibleWords = await findWordsFromLetters(
+        opponentRack,
+        2,
+        maxWordLength,
+      );
+
+      // Shuffle words but keep longer words first (they score more)
+      const shuffledWords = possibleWords.sort((a, b) => {
+        if (b.length !== a.length) return b.length - a.length;
+        return Math.random() - 0.5;
+      });
+
+      // For beginner difficulty, prefer shorter words
+      if (difficulty === "beginner") {
+        shuffledWords.sort((a, b) => {
+          if (a.length !== b.length) return a.length - b.length;
+          return Math.random() - 0.5;
+        });
+      }
+
+      // Helper to check if a placement touches lastPlayedTiles (for combo)
+      const touchesLastPlayedTiles = (
+        row: number,
+        col: number,
+        length: number,
+        isHorizontal: boolean,
+      ): boolean => {
+        if (lastPlayedTiles.length === 0) return false;
+        for (let i = 0; i < length; i++) {
+          const checkRow = isHorizontal ? row : row + i;
+          const checkCol = isHorizontal ? col + i : col;
+          for (const tile of lastPlayedTiles) {
+            if (
+              (tile.row === checkRow - 1 && tile.col === checkCol) ||
+              (tile.row === checkRow + 1 && tile.col === checkCol) ||
+              (tile.row === checkRow && tile.col === checkCol - 1) ||
+              (tile.row === checkRow && tile.col === checkCol + 1)
+            ) {
+              return true;
+            }
+          }
+        }
+        return false;
+      };
+
+      // Helper to check if horizontal placement touches existing tiles
+      const touchesExistingTileVertical = (
+        row: number,
+        col: number,
+        length: number,
+      ): boolean => {
+        for (let i = 0; i < length; i++) {
+          const r = row + i;
+          // Check left
+          if (col > 0 && currentBoard[r][col - 1] !== null) return true;
+          // Check right
+          if (col < BOARD_SIZE - 1 && currentBoard[r][col + 1] !== null)
+            return true;
+          // Check above (only for first tile)
+          if (i === 0 && r > 0 && currentBoard[r - 1][col] !== null) return true;
+          // Check below (only for last tile)
+          if (
+            i === length - 1 &&
+            r < BOARD_SIZE - 1 &&
+            currentBoard[r + 1][col] !== null
+          )
+            return true;
+        }
+        return false;
+      };
+
       // Try to find a valid word placement
-      let attempt = 0;
       let validPlacement: {
         spot: { row: number; col: number };
         word: string[];
         wordLength: number;
+        isHorizontal: boolean;
       } | null = null;
 
-      // Try different word lengths from maxWordLength down to 2
-      for (
-        let wordLength = maxWordLength;
-        wordLength >= 2 && !validPlacement;
-        wordLength--
-      ) {
-        if (wordLength > opponentRack.length) continue;
+      // Try each word from the dictionary
+      for (const wordStr of shuffledWords) {
+        if (validPlacement) break;
 
-        // Separate spots into combo spots (touching lastPlayedTiles) and regular spots
-        const comboSpots: { row: number; col: number }[] = [];
-        const regularSpots: { row: number; col: number }[] = [];
+        const wordLength = wordStr.length;
+        const word = wordStr.split("") as Letter[];
 
-        // Helper to check if a horizontal word placement touches any of the lastPlayedTiles
-        const touchesLastPlayedTiles = (
-          row: number,
-          col: number,
-          length: number,
-        ): boolean => {
-          if (lastPlayedTiles.length === 0) return false;
-          for (let i = 0; i < length; i++) {
-            const wordCol = col + i;
-            // Check adjacent cells (above, below, left, right) for lastPlayedTiles
-            for (const tile of lastPlayedTiles) {
-              if (
-                (tile.row === row - 1 && tile.col === wordCol) || // above
-                (tile.row === row + 1 && tile.col === wordCol) || // below
-                (tile.row === row && tile.col === wordCol - 1) || // left
-                (tile.row === row && tile.col === wordCol + 1) // right
-              ) {
-                return true;
-              }
-            }
-          }
-          return false;
+        // Collect all possible spots for this word length (both orientations)
+        type SpotInfo = {
+          row: number;
+          col: number;
+          isHorizontal: boolean;
+          isCombo: boolean;
         };
+        const spots: SpotInfo[] = [];
 
+        // Horizontal spots
         for (let r = 0; r < BOARD_SIZE; r++) {
           for (let c = 0; c <= BOARD_SIZE - wordLength; c++) {
-            // Check if all spots are empty
             let allEmpty = true;
             for (let i = 0; i < wordLength; i++) {
               if (currentBoard[r][c + i] !== null) {
@@ -2484,92 +2529,169 @@ const WordGame = () => {
                 break;
               }
             }
-
             if (allEmpty) {
               if (isBoardEmpty) {
-                // If board is empty, must play through center
                 const center = Math.floor(BOARD_SIZE / 2);
-                if (
-                  r === center &&
-                  c <= center &&
-                  c + wordLength - 1 >= center
-                ) {
-                  regularSpots.push({ row: r, col: c });
+                if (r === center && c <= center && c + wordLength - 1 >= center) {
+                  spots.push({ row: r, col: c, isHorizontal: true, isCombo: false });
                 }
-              } else {
-                // Only add if it touches an existing tile
-                if (touchesExistingTile(r, c, wordLength)) {
-                  // Prioritize spots that touch lastPlayedTiles for combo potential
-                  if (touchesLastPlayedTiles(r, c, wordLength)) {
-                    comboSpots.push({ row: r, col: c });
-                  } else {
-                    regularSpots.push({ row: r, col: c });
-                  }
-                }
+              } else if (touchesExistingTile(r, c, wordLength)) {
+                const isCombo = touchesLastPlayedTiles(r, c, wordLength, true);
+                spots.push({ row: r, col: c, isHorizontal: true, isCombo });
               }
             }
           }
         }
 
-        // Combine spots with combo spots first (shuffled), then regular spots (shuffled)
-        const shuffledComboSpots = [...comboSpots].sort(
-          () => Math.random() - 0.5,
-        );
-        const shuffledRegularSpots = [...regularSpots].sort(
-          () => Math.random() - 0.5,
-        );
-        const shuffledSpots = [...shuffledComboSpots, ...shuffledRegularSpots];
-
-        if (shuffledSpots.length === 0) continue;
-
-        // Try random combinations of letters
-        for (const spot of shuffledSpots) {
-          if (attempt >= maxAttempts) break;
-
-          // Generate random permutations of letters from the rack
-          const rackCopy = [...opponentRack];
-          for (let i = rackCopy.length - 1; i > 0; i--) {
-            const j = Math.floor(Math.random() * (i + 1));
-            [rackCopy[i], rackCopy[j]] = [rackCopy[j], rackCopy[i]];
+        // Vertical spots
+        for (let r = 0; r <= BOARD_SIZE - wordLength; r++) {
+          for (let c = 0; c < BOARD_SIZE; c++) {
+            let allEmpty = true;
+            for (let i = 0; i < wordLength; i++) {
+              if (currentBoard[r + i][c] !== null) {
+                allEmpty = false;
+                break;
+              }
+            }
+            if (allEmpty) {
+              if (isBoardEmpty) {
+                const center = Math.floor(BOARD_SIZE / 2);
+                if (c === center && r <= center && r + wordLength - 1 >= center) {
+                  spots.push({ row: r, col: c, isHorizontal: false, isCombo: false });
+                }
+              } else if (touchesExistingTileVertical(r, c, wordLength)) {
+                const isCombo = touchesLastPlayedTiles(r, c, wordLength, false);
+                spots.push({ row: r, col: c, isHorizontal: false, isCombo });
+              }
+            }
           }
+        }
 
-          const word = rackCopy.slice(0, wordLength);
+        // Sort spots: combo spots first, then shuffle within each group
+        spots.sort((a, b) => {
+          if (a.isCombo !== b.isCombo) return a.isCombo ? -1 : 1;
+          return Math.random() - 0.5;
+        });
 
-          // Create test board
+        // Try each spot
+        for (const spot of spots) {
           const testBoard = currentBoard.map((r) => [...r]);
           const testTiles: PlacedTile[] = [];
 
           word.forEach((letter, i) => {
-            testBoard[spot.row][spot.col + i] = {
+            const r = spot.isHorizontal ? spot.row : spot.row + i;
+            const c = spot.isHorizontal ? spot.col + i : spot.col;
+            testBoard[r][c] = {
               letter,
               score: LETTER_SCORES[letter],
             };
-            testTiles.push({ row: spot.row, col: spot.col + i, letter });
+            testTiles.push({ row: r, col: c, letter });
           });
 
-          // Validate the placement using unified validation
           const validation = await validatePlacement(
             testBoard,
             testTiles,
             isBoardEmpty,
           );
-          attempt++;
 
           if (validation.valid) {
-            validPlacement = { spot, word, wordLength };
+            validPlacement = {
+              spot: { row: spot.row, col: spot.col },
+              word,
+              wordLength,
+              isHorizontal: spot.isHorizontal,
+            };
             break;
           }
         }
       }
 
-      // If no valid placement found, pass
+      // If no valid placement found, consider swapping tiles or passing
       if (!validPlacement) {
+        // Check if opponent should swap tiles instead of passing
+        const vowels = ["A", "E", "I", "O", "U"];
+        const difficultLetters = ["Q", "X", "Z", "V", "K", "J"];
+        const vowelCount = opponentRack.filter((l) => vowels.includes(l)).length;
+        const difficultCount = opponentRack.filter((l) =>
+          difficultLetters.includes(l),
+        ).length;
+
+        // Swap if: tiles available in bag AND (no vowels, or too many difficult letters, or all consonants)
+        const shouldSwap =
+          tileBag.length >= 3 &&
+          (vowelCount === 0 || difficultCount >= 3 || vowelCount <= 1);
+
+        if (shouldSwap) {
+          // Determine which tiles to swap (prioritize difficult letters and excess consonants)
+          const tilesToSwapIndices: number[] = [];
+
+          // First, mark difficult letters for swapping
+          opponentRack.forEach((letter, idx) => {
+            if (difficultLetters.includes(letter)) {
+              tilesToSwapIndices.push(idx);
+            }
+          });
+
+          // If no vowels, swap some consonants to try to get vowels
+          if (vowelCount === 0) {
+            opponentRack.forEach((letter, idx) => {
+              if (
+                !tilesToSwapIndices.includes(idx) &&
+                !vowels.includes(letter) &&
+                tilesToSwapIndices.length < 4
+              ) {
+                tilesToSwapIndices.push(idx);
+              }
+            });
+          }
+
+          // Swap at least 2 tiles, at most 4
+          const swapCount = Math.max(
+            2,
+            Math.min(4, tilesToSwapIndices.length, tileBag.length),
+          );
+          const finalSwapIndices = tilesToSwapIndices.slice(0, swapCount);
+
+          if (finalSwapIndices.length > 0) {
+            const tilesToSwap = finalSwapIndices.map((i) => opponentRack[i]);
+            const remainingRack = opponentRack.filter(
+              (_, idx) => !finalSwapIndices.includes(idx),
+            );
+
+            // Draw new tiles from bag
+            const tilesToDraw = Math.min(tilesToSwap.length, tileBag.length);
+            const newTiles = tileBag.slice(0, tilesToDraw);
+
+            // Return swapped tiles to bag and shuffle
+            const newBag = [...tileBag.slice(tilesToDraw), ...tilesToSwap];
+            for (let i = newBag.length - 1; i > 0; i--) {
+              const j = Math.floor(Math.random() * (i + 1));
+              [newBag[i], newBag[j]] = [newBag[j], newBag[i]];
+            }
+
+            setOpponentRack([...remainingRack, ...newTiles]);
+            setTileBag(newBag);
+            setMessage(
+              getMessage("OpponentSwappedFormat", {
+                count: tilesToSwap.length.toString(),
+              }),
+            );
+            setCurrentPlayer("player");
+            setGameMode("normal");
+            setTimeRemaining(timerDuration);
+            // Swapping doesn't change lastPlayedTiles - player can still chain off them
+            return;
+          }
+        }
+
+        // Fall through to passing if swap not viable
         const newConsecutivePasses = opponentConsecutivePasses + 1;
 
-        if (newConsecutivePasses === 3 && playerConsecutivePasses === 3) {
-          // End the game after 6 consecutive passes
+        if (newConsecutivePasses >= 3 && playerConsecutivePasses >= 3) {
+          // End the game after both players passed 3 times consecutively
           setGameEnded(true);
           setOpponentConsecutivePasses(0);
+          setPlayerConsecutivePasses(0);
           setMessage(
             "Game Over! Both players passed 3 times consecutively. " +
               (playerScore > opponentScore
@@ -2596,13 +2718,19 @@ const WordGame = () => {
       const opponentPlacedTiles: PlacedTile[] = [];
 
       validPlacement.word.forEach((letter, i) => {
-        newBoard[validPlacement.spot.row][validPlacement.spot.col + i] = {
+        const row = validPlacement.isHorizontal
+          ? validPlacement.spot.row
+          : validPlacement.spot.row + i;
+        const col = validPlacement.isHorizontal
+          ? validPlacement.spot.col + i
+          : validPlacement.spot.col;
+        newBoard[row][col] = {
           letter: letter as Letter,
           score: LETTER_SCORES[letter as Letter],
         };
         opponentPlacedTiles.push({
-          row: validPlacement.spot.row,
-          col: validPlacement.spot.col + i,
+          row,
+          col,
           letter: letter as Letter,
         });
       });

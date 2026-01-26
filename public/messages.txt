@@ -35,6 +35,7 @@ OpponentScoredFormat = Opponent scored {score} points.
 
 # Turn Messages
 OpponentPassed = Opponent passes
+OpponentSwappedFormat = Opponent swapped {count} tiles
 
 # Timer Messages
 TimesUpMustSwapOrPass = You must swap tiles, or pass your turn.
