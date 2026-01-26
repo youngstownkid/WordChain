@@ -2417,17 +2417,17 @@ const WordGame = () => {
       let maxAttempts = 50;
       if (difficulty === "beginner") {
         maxWordLength = Math.min(5, opponentRack.length);
-        maxAttempts = 250;
+        maxAttempts = 25000;
       } else if (difficulty === "intermediate") {
         maxWordLength = Math.min(6, opponentRack.length);
-        maxAttempts = 500;
+        maxAttempts = 25000;
       } else if (difficulty === "advanced") {
         maxWordLength = Math.min(7, opponentRack.length);
-        maxAttempts = 1000;
+        maxAttempts = 25000;
       } else {
         // expert
         maxWordLength = Math.min(7, opponentRack.length);
-        maxAttempts = 2500;
+        maxAttempts = 50000;
       }
 
       // Try to find a valid word placement
@@ -2446,7 +2446,33 @@ const WordGame = () => {
       ) {
         if (wordLength > opponentRack.length) continue;
 
-        const availableSpots: { row: number; col: number }[] = [];
+        // Separate spots into combo spots (touching lastPlayedTiles) and regular spots
+        const comboSpots: { row: number; col: number }[] = [];
+        const regularSpots: { row: number; col: number }[] = [];
+
+        // Helper to check if a horizontal word placement touches any of the lastPlayedTiles
+        const touchesLastPlayedTiles = (
+          row: number,
+          col: number,
+          length: number,
+        ): boolean => {
+          if (lastPlayedTiles.length === 0) return false;
+          for (let i = 0; i < length; i++) {
+            const wordCol = col + i;
+            // Check adjacent cells (above, below, left, right) for lastPlayedTiles
+            for (const tile of lastPlayedTiles) {
+              if (
+                (tile.row === row - 1 && tile.col === wordCol) || // above
+                (tile.row === row + 1 && tile.col === wordCol) || // below
+                (tile.row === row && tile.col === wordCol - 1) || // left
+                (tile.row === row && tile.col === wordCol + 1) // right
+              ) {
+                return true;
+              }
+            }
+          }
+          return false;
+        };
 
         for (let r = 0; r < BOARD_SIZE; r++) {
           for (let c = 0; c <= BOARD_SIZE - wordLength; c++) {
@@ -2468,24 +2494,33 @@ const WordGame = () => {
                   c <= center &&
                   c + wordLength - 1 >= center
                 ) {
-                  availableSpots.push({ row: r, col: c });
+                  regularSpots.push({ row: r, col: c });
                 }
               } else {
                 // Only add if it touches an existing tile
                 if (touchesExistingTile(r, c, wordLength)) {
-                  availableSpots.push({ row: r, col: c });
+                  // Prioritize spots that touch lastPlayedTiles for combo potential
+                  if (touchesLastPlayedTiles(r, c, wordLength)) {
+                    comboSpots.push({ row: r, col: c });
+                  } else {
+                    regularSpots.push({ row: r, col: c });
+                  }
                 }
               }
             }
           }
         }
 
-        if (availableSpots.length === 0) continue;
-
-        // Shuffle available spots for randomness
-        const shuffledSpots = [...availableSpots].sort(
+        // Combine spots with combo spots first (shuffled), then regular spots (shuffled)
+        const shuffledComboSpots = [...comboSpots].sort(
           () => Math.random() - 0.5,
         );
+        const shuffledRegularSpots = [...regularSpots].sort(
+          () => Math.random() - 0.5,
+        );
+        const shuffledSpots = [...shuffledComboSpots, ...shuffledRegularSpots];
+
+        if (shuffledSpots.length === 0) continue;
 
         // Try random combinations of letters
         for (const spot of shuffledSpots) {
@@ -2529,13 +2564,12 @@ const WordGame = () => {
 
       // If no valid placement found, pass
       if (!validPlacement) {
-        const newOpponentPasses = opponentConsecutivePasses + 1;
+        const newConsecutivePasses = opponentConsecutivePasses + 1;
 
-        // End game if both players have passed 3 times consecutively
-        if (newOpponentPasses >= 3 && playerConsecutivePasses >= 3) {
+        if (newConsecutivePasses === 3 && playerConsecutivePasses === 3) {
+          // End the game after 6 consecutive passes
           setGameEnded(true);
           setOpponentConsecutivePasses(0);
-          setPlayerConsecutivePasses(0);
           setMessage(
             "Game Over! Both players passed 3 times consecutively. " +
               (playerScore > opponentScore
@@ -2548,7 +2582,7 @@ const WordGame = () => {
           return;
         }
 
-        setOpponentConsecutivePasses(newOpponentPasses);
+        setOpponentConsecutivePasses(newConsecutivePasses);
         setMessage(getMessage("OpponentPassed"));
         setCurrentPlayer("player");
         setGameMode("normal"); // Reset to normal mode after opponent turn
@@ -2613,7 +2647,7 @@ const WordGame = () => {
       setOpponentRack([...newOpponentRack, ...newTiles]);
       setTileBag(remainingBag);
       setIsFirstMove(false);
-      setOpponentConsecutivePasses(0); // Reset opponent's consecutive passes counter
+      setOpponentConsecutivePasses(0); // Reset consecutive passes counter
       setCurrentPlayer("player");
       // Set all tiles used in the formed words for display and combo chaining
       const allOpponentTilesUsed = scoring.allWordPositions.map((pos) => ({
@@ -2730,7 +2764,7 @@ const WordGame = () => {
     setTimerExpired(false); // Reset timer expired flag for next turn
     setTimeRemaining(timerDuration); // Reset timer to full duration
     setGameMode("normal"); // Reset game mode
-    setPlayerConsecutivePasses(0); // Reset player's consecutive passes counter
+    setPlayerConsecutivePasses(0); // Reset consecutive passes counter
     setCurrentPlayer("opponent");
 
     setTimeout(() => opponentTurn(), 500);
@@ -2847,14 +2881,13 @@ const WordGame = () => {
       recall();
     }
 
-    // Check if both players have passed 3 times consecutively
-    const newPlayerPasses = playerConsecutivePasses + 1;
+    // Check if this is the 6th consecutive pass (3 for each player)
+    const newConsecutivePasses = opponentConsecutivePasses + 1;
 
-    // End game if both players have passed 3 times consecutively
-    if (newPlayerPasses >= 3 && opponentConsecutivePasses >= 3) {
+    if (newConsecutivePasses >= 6) {
+      // End the game after 6 consecutive passes
       setGameEnded(true);
       setPlayerConsecutivePasses(0);
-      setOpponentConsecutivePasses(0);
       setMessage(
         "Game Over! Both players passed 3 times consecutively. " +
           (playerScore > opponentScore
@@ -2867,13 +2900,13 @@ const WordGame = () => {
       return;
     }
 
-    // Show warning if this pass would allow the game to end on the next opponent pass
-    if (newPlayerPasses >= 3 && opponentConsecutivePasses >= 2) {
+    if (newConsecutivePasses === 5) {
+      // This is the player's 3rd consecutive pass - show warning
       setShowPassWarning(true);
       return;
     }
 
-    setPlayerConsecutivePasses(newPlayerPasses);
+    setPlayerConsecutivePasses(newConsecutivePasses);
     setMessage("Turn passed.");
     setTimerExpired(false); // Reset timer expired flag for next turn
     setTimeRemaining(timerDuration); // Reset timer to full duration
@@ -2889,7 +2922,6 @@ const WordGame = () => {
     setShowPassWarning(false);
     setGameEnded(true);
     setPlayerConsecutivePasses(0);
-    setOpponentConsecutivePasses(0);
     setMessage(
       "Game Over! Both players passed 3 times consecutively. " +
         (playerScore > opponentScore
