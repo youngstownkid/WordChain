@@ -2377,9 +2377,15 @@ const WordGame = () => {
     return positions;
   };
 
-  const opponentTurn = async () => {
+  const opponentTurn = () => {
+    // Guard against multiple simultaneous executions
+    if (currentPlayer !== "opponent") return;
+
     setTimeout(async () => {
-      const currentBoard = board;
+      // Deep copy state to avoid stale closure references
+      const currentBoard = board.map((r) => [...r]);
+      const currentOpponentRack = [...opponentRack];
+      const currentTileBag = [...tileBag];
 
       // Helper function to check if a position touches an existing tile
       const touchesExistingTile = (
@@ -2415,17 +2421,17 @@ const WordGame = () => {
       // Determine word length based on difficulty
       let maxWordLength: number;
       if (difficulty === "beginner") {
-        maxWordLength = Math.min(5, opponentRack.length);
+        maxWordLength = Math.min(5, currentOpponentRack.length);
       } else if (difficulty === "intermediate") {
-        maxWordLength = Math.min(6, opponentRack.length);
+        maxWordLength = Math.min(6, currentOpponentRack.length);
       } else {
         // advanced and expert
-        maxWordLength = Math.min(7, opponentRack.length);
+        maxWordLength = Math.min(7, currentOpponentRack.length);
       }
 
       // Find all valid words that can be formed from the rack
       const possibleWords = await findWordsFromLetters(
-        opponentRack,
+        currentOpponentRack,
         2,
         maxWordLength,
       );
@@ -2611,14 +2617,16 @@ const WordGame = () => {
         // Check if opponent should swap tiles instead of passing
         const vowels = ["A", "E", "I", "O", "U"];
         const difficultLetters = ["Q", "X", "Z", "V", "K", "J"];
-        const vowelCount = opponentRack.filter((l) => vowels.includes(l)).length;
-        const difficultCount = opponentRack.filter((l) =>
+        const vowelCount = currentOpponentRack.filter((l) =>
+          vowels.includes(l),
+        ).length;
+        const difficultCount = currentOpponentRack.filter((l) =>
           difficultLetters.includes(l),
         ).length;
 
         // Swap if: tiles available in bag AND (no vowels, or too many difficult letters, or all consonants)
         const shouldSwap =
-          tileBag.length >= 3 &&
+          currentTileBag.length >= 3 &&
           (vowelCount === 0 || difficultCount >= 3 || vowelCount <= 1);
 
         if (shouldSwap) {
@@ -2626,7 +2634,7 @@ const WordGame = () => {
           const tilesToSwapIndices: number[] = [];
 
           // First, mark difficult letters for swapping
-          opponentRack.forEach((letter, idx) => {
+          currentOpponentRack.forEach((letter, idx) => {
             if (difficultLetters.includes(letter)) {
               tilesToSwapIndices.push(idx);
             }
@@ -2634,7 +2642,7 @@ const WordGame = () => {
 
           // If no vowels, swap some consonants to try to get vowels
           if (vowelCount === 0) {
-            opponentRack.forEach((letter, idx) => {
+            currentOpponentRack.forEach((letter, idx) => {
               if (
                 !tilesToSwapIndices.includes(idx) &&
                 !vowels.includes(letter) &&
@@ -2648,22 +2656,30 @@ const WordGame = () => {
           // Swap at least 2 tiles, at most 4
           const swapCount = Math.max(
             2,
-            Math.min(4, tilesToSwapIndices.length, tileBag.length),
+            Math.min(4, tilesToSwapIndices.length, currentTileBag.length),
           );
           const finalSwapIndices = tilesToSwapIndices.slice(0, swapCount);
 
           if (finalSwapIndices.length > 0) {
-            const tilesToSwap = finalSwapIndices.map((i) => opponentRack[i]);
-            const remainingRack = opponentRack.filter(
+            const tilesToSwap = finalSwapIndices.map(
+              (i) => currentOpponentRack[i],
+            );
+            const remainingRack = currentOpponentRack.filter(
               (_, idx) => !finalSwapIndices.includes(idx),
             );
 
             // Draw new tiles from bag
-            const tilesToDraw = Math.min(tilesToSwap.length, tileBag.length);
-            const newTiles = tileBag.slice(0, tilesToDraw);
+            const tilesToDraw = Math.min(
+              tilesToSwap.length,
+              currentTileBag.length,
+            );
+            const newTiles = currentTileBag.slice(0, tilesToDraw);
 
             // Return swapped tiles to bag and shuffle
-            const newBag = [...tileBag.slice(tilesToDraw), ...tilesToSwap];
+            const newBag = [
+              ...currentTileBag.slice(tilesToDraw),
+              ...tilesToSwap,
+            ];
             for (let i = newBag.length - 1; i > 0; i--) {
               const j = Math.floor(Math.random() * (i + 1));
               [newBag[i], newBag[j]] = [newBag[j], newBag[i]];
@@ -2757,8 +2773,8 @@ const WordGame = () => {
         ),
       });
 
-      const usedLetters = validPlacement.word;
-      const newOpponentRack = opponentRack.filter((letter) => {
+      const usedLetters = [...validPlacement.word];
+      const newOpponentRack = currentOpponentRack.filter((letter) => {
         const usedIndex = usedLetters.indexOf(letter);
         if (usedIndex !== -1) {
           usedLetters.splice(usedIndex, 1);
@@ -2767,9 +2783,12 @@ const WordGame = () => {
         return true;
       });
 
-      const tilesToDraw = Math.min(validPlacement.wordLength, tileBag.length);
-      const newTiles = tileBag.slice(0, tilesToDraw);
-      const remainingBag = tileBag.slice(tilesToDraw);
+      const tilesToDraw = Math.min(
+        validPlacement.wordLength,
+        currentTileBag.length,
+      );
+      const newTiles = currentTileBag.slice(0, tilesToDraw);
+      const remainingBag = currentTileBag.slice(tilesToDraw);
 
       setBoard(newBoard);
       setOpponentRack([...newOpponentRack, ...newTiles]);
