@@ -63,6 +63,24 @@ interface PlayerStats {
   bestWordScore: number;
 }
 
+interface CareerStats {
+  gamesPlayed: number;
+  gamesWon: number;
+  bestGameScore: number;
+  bestWordScore: number;
+  bestComboStreak: number;
+  careerRunOuts: number;
+}
+
+const DEFAULT_CAREER_STATS: CareerStats = {
+  gamesPlayed: 0,
+  gamesWon: 0,
+  bestGameScore: 0,
+  bestWordScore: 0,
+  bestComboStreak: 0,
+  careerRunOuts: 0,
+};
+
 type SquareType = "normal" | "DL" | "TL" | "DW" | "TW" | "center";
 
 type GameMode = "normal" | "group" | "swap" | "forceSwapPass";
@@ -471,6 +489,8 @@ const WordGame = () => {
     useState<number>(0); // Tracks consecutive passes opponent
   const [showPassWarning, setShowPassWarning] = useState<boolean>(false); // Shows warning before final pass
   const [showQuitConfirm, setShowQuitConfirm] = useState<boolean>(false); // Shows quit confirmation dialog
+  const [showGameOverDialog, setShowGameOverDialog] = useState<boolean>(false); // Shows game over dialog with stats
+  const [careerStats, setCareerStats] = useState<CareerStats>(DEFAULT_CAREER_STATS); // Career stats
   const [statsExpanded, setStatsExpanded] = useState<boolean>(false); // Details section collapsed by default
   const [playerComboStreak, setPlayerComboStreak] = useState<number>(0); // Player's combo streak (0 = no combo, 2+ = active)
   const [opponentComboStreak, setOpponentComboStreak] = useState<number>(0); // Opponent's combo streak (0 = no combo, 2+ = active)
@@ -597,6 +617,17 @@ const WordGame = () => {
         }
       } catch (error) {
         console.error("Failed to load saved game state:", error);
+      }
+    }
+
+    // Load career stats from localStorage
+    const savedCareerStats = localStorage.getItem("wordchain-career-stats");
+    if (savedCareerStats) {
+      try {
+        const stats = JSON.parse(savedCareerStats);
+        setCareerStats({ ...DEFAULT_CAREER_STATS, ...stats });
+      } catch (error) {
+        console.error("Failed to load career stats:", error);
       }
     }
   }, []);
@@ -906,6 +937,7 @@ const WordGame = () => {
     setGameEnded(false);
     setShowCelebration(false);
     setShowTimeoutDialog(false);
+    setShowGameOverDialog(false);
     setTimerExpired(false);
     if (timerInterval) {
       clearInterval(timerInterval);
@@ -2520,6 +2552,7 @@ const WordGame = () => {
       };
 
       // Try to find a valid word placement
+      // COMBO PRIORITY: The main point of the game is combo streaks, so we try hard to maintain them
       let validPlacement: {
         spot: { row: number; col: number };
         word: string[];
@@ -2527,10 +2560,59 @@ const WordGame = () => {
         isHorizontal: boolean;
       } | null = null;
 
+      // Helper to count exposed edges (places where player could chain)
+      const countExposedEdges = (
+        testBoard: (BoardTile | null)[][],
+        placedTiles: PlacedTile[],
+      ): number => {
+        let exposedCount = 0;
+        for (const tile of placedTiles) {
+          const directions = [
+            { dr: -1, dc: 0 },
+            { dr: 1, dc: 0 },
+            { dr: 0, dc: -1 },
+            { dr: 0, dc: 1 },
+          ];
+          for (const { dr, dc } of directions) {
+            const nr = tile.row + dr;
+            const nc = tile.col + dc;
+            if (
+              nr >= 0 &&
+              nr < BOARD_SIZE &&
+              nc >= 0 &&
+              nc < BOARD_SIZE &&
+              testBoard[nr][nc] === null
+            ) {
+              const nnr = nr + dr;
+              const nnc = nc + dc;
+              if (
+                nnr >= 0 &&
+                nnr < BOARD_SIZE &&
+                nnc >= 0 &&
+                nnc < BOARD_SIZE &&
+                testBoard[nnr][nnc] === null
+              ) {
+                exposedCount++;
+              }
+            }
+          }
+        }
+        return exposedCount;
+      };
+
+      // Collect ALL valid placements across all words, then pick the best one
+      type ValidPlacementInfo = {
+        spot: { row: number; col: number };
+        word: Letter[];
+        wordLength: number;
+        isHorizontal: boolean;
+        isCombo: boolean;
+        score: number;
+      };
+      const allValidPlacements: ValidPlacementInfo[] = [];
+
       // Try each word from the dictionary
       for (const wordStr of shuffledWords) {
-        if (validPlacement) break;
-
         const wordLength = wordStr.length;
         const word = wordStr.split("") as Letter[];
 
@@ -2609,67 +2691,7 @@ const WordGame = () => {
           }
         }
 
-        // Sort spots: combo spots first, then shuffle within each group
-        spots.sort((a, b) => {
-          if (a.isCombo !== b.isCombo) return a.isCombo ? -1 : 1;
-          return Math.random() - 0.5;
-        });
-
-        // For advanced/expert: collect valid placements and score them defensively
-        const isDefensiveMode =
-          difficulty === "advanced" || difficulty === "expert";
-        const validPlacements: Array<{
-          spot: { row: number; col: number };
-          word: Letter[];
-          wordLength: number;
-          isHorizontal: boolean;
-          defensiveScore: number;
-        }> = [];
-
-        // Helper to count exposed edges (places where player could chain)
-        const countExposedEdges = (
-          testBoard: (BoardTile | null)[][],
-          placedTiles: PlacedTile[],
-        ): number => {
-          let exposedCount = 0;
-          for (const tile of placedTiles) {
-            // Check all 4 directions for empty spaces that could be chained
-            const directions = [
-              { dr: -1, dc: 0 },
-              { dr: 1, dc: 0 },
-              { dr: 0, dc: -1 },
-              { dr: 0, dc: 1 },
-            ];
-            for (const { dr, dc } of directions) {
-              const nr = tile.row + dr;
-              const nc = tile.col + dc;
-              if (
-                nr >= 0 &&
-                nr < BOARD_SIZE &&
-                nc >= 0 &&
-                nc < BOARD_SIZE &&
-                testBoard[nr][nc] === null
-              ) {
-                // Check if this empty space has room to extend into a word
-                // (at least one more empty space in the same direction)
-                const nnr = nr + dr;
-                const nnc = nc + dc;
-                if (
-                  nnr >= 0 &&
-                  nnr < BOARD_SIZE &&
-                  nnc >= 0 &&
-                  nnc < BOARD_SIZE &&
-                  testBoard[nnr][nnc] === null
-                ) {
-                  exposedCount++;
-                }
-              }
-            }
-          }
-          return exposedCount;
-        };
-
-        // Try each spot
+        // Try each spot and collect valid placements
         for (const spot of spots) {
           const testBoard = currentBoard.map((r) => [...r]);
           const testTiles: PlacedTile[] = [];
@@ -2691,54 +2713,94 @@ const WordGame = () => {
           );
 
           if (validation.valid) {
+            // Calculate score for this placement
+            const exposedEdges = countExposedEdges(testBoard, testTiles);
+            const isDefensiveMode =
+              difficulty === "advanced" || difficulty === "expert";
+
+            // Score formula: COMBO is most important (10000 points)
+            // Then word length (for scoring), then defensive considerations
+            let score = 0;
+            if (spot.isCombo) {
+              score += 10000; // Huge bonus for combo - this is the main goal!
+            }
+            score += wordLength * 100; // Longer words score more
             if (isDefensiveMode) {
-              // Calculate defensive score (lower exposed edges = better)
-              const exposedEdges = countExposedEdges(testBoard, testTiles);
-              // Prefer combo spots, then fewer exposed edges
-              const defensiveScore =
-                (spot.isCombo ? 1000 : 0) +
-                (100 - exposedEdges) +
-                wordLength * 10; // Prefer longer words too
-              validPlacements.push({
-                spot: { row: spot.row, col: spot.col },
-                word,
-                wordLength,
-                isHorizontal: spot.isHorizontal,
-                defensiveScore,
-              });
-              // For expert, collect more options before deciding
-              if (difficulty === "expert" && validPlacements.length < 5) {
-                continue;
-              }
-              // For advanced, take first few good options
-              if (difficulty === "advanced" && validPlacements.length < 3) {
-                continue;
-              }
-            } else {
-              // Beginner/Intermediate: take first valid placement
-              validPlacement = {
-                spot: { row: spot.row, col: spot.col },
-                word,
-                wordLength,
-                isHorizontal: spot.isHorizontal,
-              };
+              score += 50 - exposedEdges; // Defensive bonus
+            }
+
+            allValidPlacements.push({
+              spot: { row: spot.row, col: spot.col },
+              word,
+              wordLength,
+              isHorizontal: spot.isHorizontal,
+              isCombo: spot.isCombo,
+              score,
+            });
+
+            // For beginner, limit search to avoid long computation
+            if (difficulty === "beginner" && allValidPlacements.length >= 10) {
               break;
             }
           }
         }
 
-        // For defensive modes, pick the best placement from collected options
-        if (isDefensiveMode && validPlacements.length > 0 && !validPlacement) {
-          // Sort by defensive score (highest first)
-          validPlacements.sort((a, b) => b.defensiveScore - a.defensiveScore);
-          const best = validPlacements[0];
-          validPlacement = {
-            spot: best.spot,
-            word: best.word,
-            wordLength: best.wordLength,
-            isHorizontal: best.isHorizontal,
-          };
+        // For beginner, stop after finding some valid placements
+        if (difficulty === "beginner" && allValidPlacements.length >= 10) {
+          break;
         }
+
+        // For intermediate, collect more but not exhaustively
+        if (
+          difficulty === "intermediate" &&
+          allValidPlacements.length >= 20
+        ) {
+          break;
+        }
+
+        // For advanced/expert, collect more options (up to 50)
+        if (
+          (difficulty === "advanced" || difficulty === "expert") &&
+          allValidPlacements.length >= 50
+        ) {
+          break;
+        }
+      }
+
+      // Pick the best placement based on score
+      if (allValidPlacements.length > 0) {
+        // Sort by score (highest first)
+        allValidPlacements.sort((a, b) => b.score - a.score);
+
+        // For beginner, sometimes pick a suboptimal choice (more randomness)
+        let selectedIndex = 0;
+        if (difficulty === "beginner" && allValidPlacements.length > 1) {
+          // 40% chance to pick from top 3 instead of the best
+          if (Math.random() < 0.4) {
+            selectedIndex = Math.floor(
+              Math.random() * Math.min(3, allValidPlacements.length),
+            );
+          }
+        } else if (
+          difficulty === "intermediate" &&
+          allValidPlacements.length > 1
+        ) {
+          // 20% chance to pick from top 2
+          if (Math.random() < 0.2) {
+            selectedIndex = Math.floor(
+              Math.random() * Math.min(2, allValidPlacements.length),
+            );
+          }
+        }
+        // Advanced/Expert always pick the best
+
+        const best = allValidPlacements[selectedIndex];
+        validPlacement = {
+          spot: best.spot,
+          word: best.word,
+          wordLength: best.wordLength,
+          isHorizontal: best.isHorizontal,
+        };
       }
 
       // If no valid placement found, consider swapping tiles or passing
@@ -2837,15 +2899,17 @@ const WordGame = () => {
           setGameEnded(true);
           setOpponentConsecutivePasses(0);
           setPlayerConsecutivePasses(0);
+          const won = playerScore > opponentScore;
           setMessage(
             "Game Over! Both players passed 3 times consecutively. " +
-              (playerScore > opponentScore
+              (won
                 ? "You win! 🎉"
                 : opponentScore > playerScore
                   ? "Opponent wins!"
                   : "It's a tie!"),
           );
           localStorage.removeItem("scrabbull-game-state");
+          endGameWithStats(won);
           return;
         }
 
@@ -3022,18 +3086,38 @@ const WordGame = () => {
       newTiles.length === 0 &&
       [...playerRack, ...newTiles].length === 0
     ) {
+      const finalPlayerScore = playerScore + scoring.finalScore;
+      const won = finalPlayerScore > opponentScore;
       setGameEnded(true);
       setShowCelebration(true);
       setMessage(
         "Game Over! " +
-          (playerScore > opponentScore
+          (won
             ? "You win! 🎉"
-            : opponentScore > playerScore
+            : opponentScore > finalPlayerScore
               ? "Opponent wins!"
               : "It's a tie!"),
       );
       // Clear saved game state when game ends
       localStorage.removeItem("scrabbull-game-state");
+      // Update career stats with the final values (including this turn's scoring)
+      const finalPlayerStats = {
+        highStreak: Math.max(playerStats.highStreak, scoring.newComboStreak),
+        totalScore: playerStats.totalScore + scoring.finalScore,
+        runOuts: playerStats.runOuts + (scoring.isRunOut ? 1 : 0),
+        bestWordScore: Math.max(playerStats.bestWordScore, scoring.finalScore),
+      };
+      const newCareerStats: CareerStats = {
+        gamesPlayed: careerStats.gamesPlayed + 1,
+        gamesWon: careerStats.gamesWon + (won ? 1 : 0),
+        bestGameScore: Math.max(careerStats.bestGameScore, finalPlayerScore),
+        bestWordScore: Math.max(careerStats.bestWordScore, finalPlayerStats.bestWordScore),
+        bestComboStreak: Math.max(careerStats.bestComboStreak, finalPlayerStats.highStreak),
+        careerRunOuts: careerStats.careerRunOuts + finalPlayerStats.runOuts,
+      };
+      setCareerStats(newCareerStats);
+      localStorage.setItem("wordchain-career-stats", JSON.stringify(newCareerStats));
+      setShowGameOverDialog(true);
       return;
     }
 
@@ -3174,15 +3258,17 @@ const WordGame = () => {
       // End the game after 6 consecutive passes
       setGameEnded(true);
       setPlayerConsecutivePasses(0);
+      const won = playerScore > opponentScore;
       setMessage(
         "Game Over! Both players passed 3 times consecutively. " +
-          (playerScore > opponentScore
+          (won
             ? "You win! 🎉"
             : opponentScore > playerScore
               ? "Opponent wins!"
               : "It's a tie!"),
       );
       localStorage.removeItem("scrabbull-game-state");
+      endGameWithStats(won);
       return;
     }
 
@@ -3203,20 +3289,37 @@ const WordGame = () => {
     setTimeout(() => opponentTurn(), 1000);
   };
 
+  // Update career stats and show game over dialog
+  const endGameWithStats = (won: boolean) => {
+    const newCareerStats: CareerStats = {
+      gamesPlayed: careerStats.gamesPlayed + 1,
+      gamesWon: careerStats.gamesWon + (won ? 1 : 0),
+      bestGameScore: Math.max(careerStats.bestGameScore, playerScore),
+      bestWordScore: Math.max(careerStats.bestWordScore, playerStats.bestWordScore),
+      bestComboStreak: Math.max(careerStats.bestComboStreak, playerStats.highStreak),
+      careerRunOuts: careerStats.careerRunOuts + playerStats.runOuts,
+    };
+    setCareerStats(newCareerStats);
+    localStorage.setItem("wordchain-career-stats", JSON.stringify(newCareerStats));
+    setShowGameOverDialog(true);
+  };
+
   const confirmPass = () => {
     // User confirmed the final pass - end the game
     setShowPassWarning(false);
     setGameEnded(true);
     setPlayerConsecutivePasses(0);
+    const won = playerScore > opponentScore;
     setMessage(
       "Game Over! Both players passed 3 times consecutively. " +
-        (playerScore > opponentScore
+        (won
           ? "You win! 🎉"
           : opponentScore > playerScore
             ? "Opponent wins!"
             : "It's a tie!"),
     );
     localStorage.removeItem("scrabbull-game-state");
+    endGameWithStats(won);
   };
 
   const cancelPass = () => {
@@ -3272,6 +3375,7 @@ const WordGame = () => {
     setGameEnded(false);
     setShowCelebration(false);
     setShowTimeoutDialog(false);
+    setShowGameOverDialog(false);
     setTimerExpired(false);
     setGameStarted(false);
     setCurrentPlayer("player");
@@ -4296,6 +4400,91 @@ const WordGame = () => {
                   Quit Game
                 </button>
               </div>
+            </div>
+          </div>
+        )}
+
+        {showGameOverDialog && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+            <div className={`${boardBg} p-6 rounded-lg max-w-md w-full`}>
+              <h2 className="text-2xl font-bold mb-2 text-center">
+                {playerScore > opponentScore
+                  ? "🎉 You Win!"
+                  : opponentScore > playerScore
+                    ? "Game Over"
+                    : "It's a Tie!"}
+              </h2>
+              <p className="text-center mb-4 text-lg">
+                Final Score: {playerScore} - {opponentScore}
+              </p>
+
+              {/* This Game Stats */}
+              <div className={`${darkMode ? "bg-gray-700" : "bg-gray-100"} p-3 rounded-lg mb-4`}>
+                <h3 className="font-semibold mb-2 text-center">This Game</h3>
+                <div className="grid grid-cols-2 gap-2 text-sm">
+                  <div className="flex justify-between">
+                    <span>Best Word:</span>
+                    <span className="font-semibold">{playerStats.bestWordScore}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span>Best Streak:</span>
+                    <span className="font-semibold">{playerStats.highStreak}x</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span>Run Outs:</span>
+                    <span className="font-semibold">{playerStats.runOuts}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span>Total Score:</span>
+                    <span className="font-semibold">{playerScore}</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Career Stats */}
+              <div className={`${darkMode ? "bg-blue-900" : "bg-blue-100"} p-3 rounded-lg mb-4`}>
+                <h3 className="font-semibold mb-2 text-center">Career Stats</h3>
+                <div className="grid grid-cols-2 gap-2 text-sm">
+                  <div className="flex justify-between">
+                    <span>Games Played:</span>
+                    <span className="font-semibold">{careerStats.gamesPlayed}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span>Games Won:</span>
+                    <span className="font-semibold">{careerStats.gamesWon}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span>Best Game:</span>
+                    <span className="font-semibold">{careerStats.bestGameScore}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span>Best Word:</span>
+                    <span className="font-semibold">{careerStats.bestWordScore}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span>Best Streak:</span>
+                    <span className="font-semibold">{careerStats.bestComboStreak}x</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span>Run Outs:</span>
+                    <span className="font-semibold">{careerStats.careerRunOuts}</span>
+                  </div>
+                </div>
+              </div>
+
+              <button
+                onClick={() => {
+                  setShowGameOverDialog(false);
+                  quitGame();
+                }}
+                className={`w-full py-3 rounded-lg font-semibold ${
+                  darkMode
+                    ? "bg-blue-700 hover:bg-blue-600"
+                    : "bg-blue-500 hover:bg-blue-600 text-white"
+                }`}
+              >
+                Play Again
+              </button>
             </div>
           </div>
         )}
