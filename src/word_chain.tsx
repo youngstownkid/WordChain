@@ -470,8 +470,6 @@ const WordGame = () => {
   const [statsExpanded, setStatsExpanded] = useState<boolean>(false); // Details section collapsed by default
   const [playerComboStreak, setPlayerComboStreak] = useState<number>(0); // Player's combo streak (0 = no combo, 2+ = active)
   const [opponentComboStreak, setOpponentComboStreak] = useState<number>(0); // Opponent's combo streak (0 = no combo, 2+ = active)
-  const [lastPlayerTiles, setLastPlayerTiles] = useState<PlacedTile[]>([]); // Last tiles played by player (for opponent to chain off)
-  const [lastOpponentTiles, setLastOpponentTiles] = useState<PlacedTile[]>([]); // Last tiles played by opponent (for player to chain off)
 
   // Touch drag state
   const [touchDragTile, setTouchDragTile] = useState<{
@@ -527,8 +525,6 @@ const WordGame = () => {
         setPlayerComboStreak(state.playerComboStreak || 0);
         setOpponentComboStreak(state.opponentComboStreak || 0);
         setLastPlayedTiles(state.lastPlayedTiles || []);
-        setLastPlayerTiles(state.lastPlayerTiles || []);
-        setLastOpponentTiles(state.lastOpponentTiles || []);
 
         // Restore timer state directly from saved data
         const savedTimerExpired = state.timerExpired || false;
@@ -625,7 +621,7 @@ const WordGame = () => {
           };
         });
 
-        const scoring = calculateFullScore(boardWithPlacedTiles, placedTiles, lastOpponentTiles, playerComboStreak);
+        const scoring = calculateFullScore(boardWithPlacedTiles, placedTiles, lastPlayedTiles, playerComboStreak);
         const wordsText = validation.words.join(", ");
 
         let previewMessage = `Preview: ${scoring.finalScore} points (${wordsText})`;
@@ -674,8 +670,6 @@ const WordGame = () => {
         playerComboStreak,
         opponentComboStreak,
         lastPlayedTiles,
-        lastPlayerTiles,
-        lastOpponentTiles,
         timestamp: Date.now(), // Timestamp for "Resuming from..." message
       };
       localStorage.setItem("scrabbull-game-state", JSON.stringify(gameState));
@@ -705,8 +699,6 @@ const WordGame = () => {
     playerComboStreak,
     opponentComboStreak,
     lastPlayedTiles,
-    lastPlayerTiles,
-    lastOpponentTiles,
   ]);
 
   // Auto-save timer state every second while timer is running
@@ -2490,6 +2482,7 @@ const WordGame = () => {
         setCurrentPlayer("player");
         setGameMode("normal"); // Reset to normal mode after opponent turn
         setTimeRemaining(timerDuration); // Reset timer to full duration
+        // Passing doesn't change lastPlayedTiles - player can still chain off them
         return;
       }
 
@@ -2509,15 +2502,11 @@ const WordGame = () => {
         });
       });
 
-      // Use shared scoring function - opponent chains off player's last tiles
-      const scoring = calculateFullScore(newBoard, opponentPlacedTiles, lastPlayerTiles, opponentComboStreak);
+      // Use shared scoring function - opponent chains off the last played tiles (by either player)
+      const scoring = calculateFullScore(newBoard, opponentPlacedTiles, lastPlayedTiles, opponentComboStreak);
 
-      // Update opponent's combo streak
+      // Update opponent's combo streak (player's streak is unaffected)
       setOpponentComboStreak(scoring.newComboStreak);
-      // If opponent didn't chain, reset player's streak
-      if (!scoring.isCombo) {
-        setPlayerComboStreak(0);
-      }
 
       setOpponentScore(opponentScore + scoring.finalScore);
       setOpponentStats({
@@ -2547,14 +2536,13 @@ const WordGame = () => {
       setIsFirstMove(false);
       setConsecutivePasses(0); // Reset consecutive passes counter
       setCurrentPlayer("player");
-      // Set all tiles used in the formed words for display and player to potentially chain off
+      // Set all tiles used in the formed words for display and combo chaining
       const allOpponentTilesUsed = scoring.allWordPositions.map(pos => ({
         row: pos.row,
         col: pos.col,
         letter: newBoard[pos.row][pos.col]?.letter as Letter,
       }));
-      setLastPlayedTiles(allOpponentTilesUsed); // For board display
-      setLastOpponentTiles(allOpponentTilesUsed); // For player's combo detection
+      setLastPlayedTiles(allOpponentTilesUsed);
 
       let opponentMessage = getMessage("OpponentScoredFormat", { score: scoring.finalScore.toString() });
       if (scoring.isCombo) {
@@ -2585,15 +2573,11 @@ const WordGame = () => {
       };
     });
 
-    // Use shared scoring function - player chains off opponent's last tiles
-    const scoring = calculateFullScore(boardWithPlacedTiles, placedTiles, lastOpponentTiles, playerComboStreak);
+    // Use shared scoring function - player chains off the last played tiles (by either player)
+    const scoring = calculateFullScore(boardWithPlacedTiles, placedTiles, lastPlayedTiles, playerComboStreak);
 
-    // Update player's combo streak
+    // Update player's combo streak (opponent's streak is unaffected)
     setPlayerComboStreak(scoring.newComboStreak);
-    // If player didn't chain, reset opponent's streak opportunity
-    if (!scoring.isCombo) {
-      setOpponentComboStreak(0);
-    }
 
     setPlayerScore(playerScore + scoring.finalScore);
     setPlayerStats({
@@ -2625,14 +2609,13 @@ const WordGame = () => {
 
     setPlayerRack([...playerRack, ...newTiles]);
     setTileBag(remainingBag);
-    // Set all tiles used in the formed words for display and opponent to potentially chain off
+    // Set all tiles used in the formed words for display and combo chaining
     const allTilesUsed = scoring.allWordPositions.map(pos => ({
       row: pos.row,
       col: pos.col,
       letter: boardWithPlacedTiles[pos.row][pos.col]?.letter as Letter,
     }));
-    setLastPlayedTiles(allTilesUsed); // For board display
-    setLastPlayerTiles(allTilesUsed); // For opponent's combo detection
+    setLastPlayedTiles(allTilesUsed);
     setPlacedTiles([]);
     setInvalidTiles([]);
     setIsFirstMove(false);
@@ -2809,6 +2792,7 @@ const WordGame = () => {
     setTimeRemaining(timerDuration); // Reset timer to full duration
     setShowTimeoutDialog(false); // Close timeout dialog
     setGameMode("normal"); // Reset game mode
+    // Passing doesn't change lastPlayedTiles - opponent can still chain off them
     setCurrentPlayer("opponent");
     setTimeout(() => opponentTurn(), 1000);
   };
@@ -2893,8 +2877,7 @@ const WordGame = () => {
     setMessage("");
     setPlayerComboStreak(0);
     setOpponentComboStreak(0);
-    setLastPlayerTiles([]);
-    setLastOpponentTiles([]);
+    setLastPlayedTiles([]);
   };
 
   const bgColor = darkMode ? "bg-gray-900" : "bg-gray-100";
@@ -2910,7 +2893,7 @@ const WordGame = () => {
             <span className="text-2xl sm:text-3xl">🐂</span>
             Word Chain
             <span className="text-[0.5rem] sm:text-xs text-gray-500 font-normal self-end mb-0.5">
-              v26.01.25.18.22
+              v26.01.25.22.32
             </span>
           </h1>
           <div className="flex items-center gap-2">
