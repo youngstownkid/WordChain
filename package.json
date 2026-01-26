@@ -1,10 +1,11 @@
 {
   "name": "scrabble-game",
-  "version": "1.1.26_1226a",
+  "version": "1.01.26_0034",
   "type": "module",
   "scripts": {
+    "update-version": "node scripts/update-version.js",
     "dev": "vite",
-    "build": "tsc && vite build",
+    "build": "npm run update-version && tsc && vite build",
     "preview": "vite preview",
     "predeploy": "npm run build",
     "deploy": "gh-pages -d dist"
