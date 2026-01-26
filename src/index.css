@@ -67,3 +67,24 @@ html, body {
   left: var(--drag-x);
   top: var(--drag-y);
 }
+
+/* Tile recall animation - spins and shrinks as if being thrown back */
+@keyframes tileRecall {
+  0% {
+    transform: rotate(0deg) scale(1);
+    opacity: 1;
+  }
+  50% {
+    transform: rotate(360deg) scale(1.2);
+    opacity: 0.8;
+  }
+  100% {
+    transform: rotate(720deg) scale(0);
+    opacity: 0;
+  }
+}
+
+.tile-recall {
+  animation: tileRecall 0.3s ease-in forwards;
+  pointer-events: none;
+}

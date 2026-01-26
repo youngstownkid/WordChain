@@ -512,8 +512,25 @@ const WordGame = () => {
     tiles: Letter[];
     indices: number[];
   } | null>(null);
+  const [touchHoldInfo, setTouchHoldInfo] = useState<{
+    startX: number;
+    startY: number;
+    rackIndex: number;
+  } | null>(null);
+  const touchHoldTimerRef = useRef<NodeJS.Timeout | null>(null);
   const boardRef = useRef<HTMLDivElement>(null);
   const rackRef = useRef<HTMLDivElement>(null);
+
+  // Double-tap recall state
+  const [lastTapInfo, setLastTapInfo] = useState<{
+    row: number;
+    col: number;
+    time: number;
+  } | null>(null);
+  const [recallingTile, setRecallingTile] = useState<{
+    row: number;
+    col: number;
+  } | null>(null);
 
   useEffect(() => {
     // Only load messages on mount, not the word list
@@ -1086,6 +1103,33 @@ const WordGame = () => {
 
       const touch = e.touches[0];
 
+      // For rack tiles not in multi-select mode, start hold timer for group mode
+      if (source === "rack" && index !== undefined && !multiSelectMode) {
+        // Clear any existing timer
+        if (touchHoldTimerRef.current) {
+          clearTimeout(touchHoldTimerRef.current);
+        }
+
+        // Store touch start info for detecting movement
+        setTouchHoldInfo({
+          startX: touch.clientX,
+          startY: touch.clientY,
+          rackIndex: index,
+        });
+
+        // Start a hold timer - if they hold for 500ms without moving, enter group mode
+        touchHoldTimerRef.current = setTimeout(() => {
+          setMultiSelectMode(true);
+          setSelectedTiles([index]);
+          setMessage(getMessage("GroupModeActivated"));
+          // Clear touch drag state since we're entering group mode, not dragging
+          setTouchDragTile(null);
+          setTouchDragPosition(null);
+          setTouchHoldInfo(null);
+          touchHoldTimerRef.current = null;
+        }, 500);
+      }
+
       // For multi-select mode, handle group drag
       if (
         source === "rack" &&
@@ -1097,7 +1141,8 @@ const WordGame = () => {
         const tilesToDrag = selectedTiles.map((i) => playerRack[i]);
         setTouchMultiTiles({ tiles: tilesToDrag, indices: selectedTiles });
         setTouchDragTile(null);
-      } else {
+      } else if (!multiSelectMode || source === "board") {
+        // Only set drag tile if not waiting for hold timer (for rack) or if from board
         setTouchDragTile({ letter, source, index, row, col });
         setTouchMultiTiles(null);
       }
@@ -1109,17 +1154,39 @@ const WordGame = () => {
 
   const handleTouchMove = useCallback(
     (e: React.TouchEvent) => {
+      const touch = e.touches[0];
+
+      // Check if user moved too much while waiting for hold timer
+      if (touchHoldInfo && touchHoldTimerRef.current) {
+        const dx = touch.clientX - touchHoldInfo.startX;
+        const dy = touch.clientY - touchHoldInfo.startY;
+        const distance = Math.sqrt(dx * dx + dy * dy);
+
+        // If moved more than 10 pixels, cancel hold timer and start drag
+        if (distance > 10) {
+          clearTimeout(touchHoldTimerRef.current);
+          touchHoldTimerRef.current = null;
+          setTouchHoldInfo(null);
+        }
+      }
+
       if (!touchDragTile && !touchMultiTiles) return;
 
       e.preventDefault(); // Prevent scrolling while dragging
-      const touch = e.touches[0];
       setTouchDragPosition({ x: touch.clientX, y: touch.clientY });
     },
-    [touchDragTile, touchMultiTiles],
+    [touchDragTile, touchMultiTiles, touchHoldInfo],
   );
 
   const handleTouchEnd = useCallback(
     (_e: React.TouchEvent) => {
+      // Clear hold timer if it's still running
+      if (touchHoldTimerRef.current) {
+        clearTimeout(touchHoldTimerRef.current);
+        touchHoldTimerRef.current = null;
+      }
+      setTouchHoldInfo(null);
+
       if (!touchDragTile && !touchMultiTiles) return;
       if (!touchDragPosition) {
         setTouchDragTile(null);
@@ -1170,6 +1237,58 @@ const WordGame = () => {
       setTouchDragPosition(null);
     },
     [touchDragTile, touchMultiTiles, touchDragPosition, playerRack.length],
+  );
+
+  // Double-tap handler for recalling placed tiles
+  const handleTileDoubleTap = useCallback(
+    (row: number, col: number) => {
+      if (currentPlayer !== "player") return;
+
+      // Check if this tile is a placed tile (not a permanent one)
+      const isPlacedTile = placedTiles.some(
+        (t) => t.row === row && t.col === col,
+      );
+      if (!isPlacedTile) return;
+
+      const now = Date.now();
+      const DOUBLE_TAP_THRESHOLD = 300; // ms
+
+      if (
+        lastTapInfo &&
+        lastTapInfo.row === row &&
+        lastTapInfo.col === col &&
+        now - lastTapInfo.time < DOUBLE_TAP_THRESHOLD
+      ) {
+        // Double tap detected - recall this tile with animation
+        setRecallingTile({ row, col });
+        setLastTapInfo(null);
+
+        // After animation completes, actually move the tile
+        setTimeout(() => {
+          const tile = placedTiles.find((t) => t.row === row && t.col === col);
+          if (tile) {
+            // Remove from board
+            const newBoard = board.map((r) => [...r]);
+            newBoard[row][col] = null;
+            setBoard(newBoard);
+
+            // Remove from placed tiles
+            setPlacedTiles(placedTiles.filter((t) => !(t.row === row && t.col === col)));
+
+            // Add back to rack
+            setPlayerRack([...playerRack, tile.letter]);
+
+            // Clear invalid tiles if this was one
+            setInvalidTiles(invalidTiles.filter((t) => !(t.row === row && t.col === col)));
+          }
+          setRecallingTile(null);
+        }, 300); // Match animation duration
+      } else {
+        // First tap - record it
+        setLastTapInfo({ row, col, time: now });
+      }
+    },
+    [currentPlayer, placedTiles, lastTapInfo, board, playerRack, invalidTiles],
   );
 
   const handleTouchDropOnBoard = useCallback(
@@ -4260,6 +4379,14 @@ const WordGame = () => {
                       const isComboTile = lastPlayedTiles.some(
                         (t) => t.row === rowIndex && t.col === colIndex,
                       );
+                      // Check if this is a placed tile (can be recalled)
+                      const isPlacedTile = placedTiles.some(
+                        (t) => t.row === rowIndex && t.col === colIndex,
+                      );
+                      // Check if this tile is being recalled (spinning animation)
+                      const isRecalling =
+                        recallingTile?.row === rowIndex &&
+                        recallingTile?.col === colIndex;
 
                       // Generate random animation parameters for each tile
                       const animationDelay =
@@ -4347,10 +4474,7 @@ const WordGame = () => {
                               onTouchStart={(e) => {
                                 if (
                                   !showCelebration &&
-                                  placedTiles.some(
-                                    (t) =>
-                                      t.row === rowIndex && t.col === colIndex,
-                                  )
+                                  isPlacedTile
                                 ) {
                                   handleTouchStart(
                                     e,
@@ -4363,10 +4487,22 @@ const WordGame = () => {
                                 }
                               }}
                               onTouchMove={handleTouchMove}
-                              onTouchEnd={handleTouchEnd}
+                              onTouchEnd={(e) => {
+                                handleTouchEnd(e);
+                                // Check for double-tap on placed tiles
+                                if (isPlacedTile && !showCelebration) {
+                                  handleTileDoubleTap(rowIndex, colIndex);
+                                }
+                              }}
+                              onClick={() => {
+                                // Desktop double-click support
+                                if (isPlacedTile && !showCelebration) {
+                                  handleTileDoubleTap(rowIndex, colIndex);
+                                }
+                              }}
                               className={`flex flex-col items-center justify-center leading-none touch-none ${
-                                !showCelebration ? "cursor-move" : ""
-                              }`}
+                                !showCelebration && !isRecalling ? "cursor-move" : ""
+                              } ${isRecalling ? "tile-recall" : ""}`}
                             >
                               <div className="text-xs sm:text-sm md:text-base lg:text-sm xl:text-lg font-bold leading-none">
                                 {cell.letter}
