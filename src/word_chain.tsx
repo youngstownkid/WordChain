@@ -2378,9 +2378,6 @@ const WordGame = () => {
   };
 
   const opponentTurn = () => {
-    // Guard against multiple simultaneous executions
-    if (currentPlayer !== "opponent") return;
-
     setTimeout(async () => {
       // Deep copy state to avoid stale closure references
       const currentBoard = board.map((r) => [...r]);

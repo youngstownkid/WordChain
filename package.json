@@ -1,6 +1,6 @@
 {
   "name": "scrabble-game",
-  "version": "1.1.26",
+  "version": "1.1.26_1226a",
   "type": "module",
   "scripts": {
     "dev": "vite",
