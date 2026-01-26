@@ -465,7 +465,10 @@ const WordGame = () => {
   const [timerExpired, setTimerExpired] = useState<boolean>(false); // Tracks if timer ran out this turn
   const [isSwapMode, setIsSwapMode] = useState<boolean>(false); // Tracks if user is in swap tile selection mode
   const [gameMode, setGameMode] = useState<GameMode>("normal"); // Tracks current game mode
-  const [consecutivePasses, setConsecutivePasses] = useState<number>(0); // Tracks consecutive passes by both players
+  const [playerConsecutivePasses, setPlayerConsecutivePasses] =
+    useState<number>(0); // Tracks consecutive passes for  player
+  const [opponentConsecutivePasses, setOpponentConsecutivePasses] =
+    useState<number>(0); // Tracks consecutive passes opponent
   const [showPassWarning, setShowPassWarning] = useState<boolean>(false); // Shows warning before final pass
   const [statsExpanded, setStatsExpanded] = useState<boolean>(false); // Details section collapsed by default
   const [playerComboStreak, setPlayerComboStreak] = useState<number>(0); // Player's combo streak (0 = no combo, 2+ = active)
@@ -621,7 +624,12 @@ const WordGame = () => {
           };
         });
 
-        const scoring = calculateFullScore(boardWithPlacedTiles, placedTiles, lastPlayedTiles, playerComboStreak);
+        const scoring = calculateFullScore(
+          boardWithPlacedTiles,
+          placedTiles,
+          lastPlayedTiles,
+          playerComboStreak,
+        );
         const wordsText = validation.words.join(", ");
 
         let previewMessage = `Preview: ${scoring.finalScore} points (${wordsText})`;
@@ -1756,7 +1764,10 @@ const WordGame = () => {
     }
   };
 
-  const calculateScore = (tiles: PlacedTile[], scoreBoard?: (BoardTile | null)[][]): number => {
+  const calculateScore = (
+    tiles: PlacedTile[],
+    scoreBoard?: (BoardTile | null)[][],
+  ): number => {
     if (tiles.length === 0) return 0;
 
     // Use provided board or fall back to state board
@@ -1962,8 +1973,10 @@ const WordGame = () => {
     if (currentComboTiles.length > 0) {
       for (const word of individualWords) {
         // Check if this word uses any of the combo tiles
-        const wordChainsOff = word.some(pos =>
-          currentComboTiles.some(combo => combo.row === pos.row && combo.col === pos.col)
+        const wordChainsOff = word.some((pos) =>
+          currentComboTiles.some(
+            (combo) => combo.row === pos.row && combo.col === pos.col,
+          ),
         );
         if (wordChainsOff) {
           comboWordCount++;
@@ -1980,7 +1993,10 @@ const WordGame = () => {
 
     if (isCombo) {
       // If starting a new streak, start at 2; otherwise add the combo word count
-      newComboStreak = currentComboStreak === 0 ? 1 + comboWordCount : currentComboStreak + comboWordCount;
+      newComboStreak =
+        currentComboStreak === 0
+          ? 1 + comboWordCount
+          : currentComboStreak + comboWordCount;
       comboMultiplier = newComboStreak;
       finalScore = adjustedBaseScore * comboMultiplier;
     }
@@ -2257,7 +2273,8 @@ const WordGame = () => {
       let startCol = minCol;
       let endCol = maxCol;
       while (startCol > 0 && testBoard[row][startCol - 1] !== null) startCol--;
-      while (endCol < BOARD_SIZE - 1 && testBoard[row][endCol + 1] !== null) endCol++;
+      while (endCol < BOARD_SIZE - 1 && testBoard[row][endCol + 1] !== null)
+        endCol++;
 
       // Add main word if it's more than 1 letter
       if (endCol - startCol >= 1) {
@@ -2272,8 +2289,16 @@ const WordGame = () => {
       tiles.forEach((tile) => {
         let perpendicularStart = tile.row;
         let perpendicularEnd = tile.row;
-        while (perpendicularStart > 0 && testBoard[perpendicularStart - 1][tile.col] !== null) perpendicularStart--;
-        while (perpendicularEnd < BOARD_SIZE - 1 && testBoard[perpendicularEnd + 1][tile.col] !== null) perpendicularEnd++;
+        while (
+          perpendicularStart > 0 &&
+          testBoard[perpendicularStart - 1][tile.col] !== null
+        )
+          perpendicularStart--;
+        while (
+          perpendicularEnd < BOARD_SIZE - 1 &&
+          testBoard[perpendicularEnd + 1][tile.col] !== null
+        )
+          perpendicularEnd++;
 
         if (perpendicularStart !== perpendicularEnd) {
           const perpWord: Array<{ row: number; col: number }> = [];
@@ -2293,7 +2318,8 @@ const WordGame = () => {
       let startRow = minRow;
       let endRow = maxRow;
       while (startRow > 0 && testBoard[startRow - 1][col] !== null) startRow--;
-      while (endRow < BOARD_SIZE - 1 && testBoard[endRow + 1][col] !== null) endRow++;
+      while (endRow < BOARD_SIZE - 1 && testBoard[endRow + 1][col] !== null)
+        endRow++;
 
       // Add main word if it's more than 1 letter
       if (endRow - startRow >= 1) {
@@ -2308,8 +2334,16 @@ const WordGame = () => {
       tiles.forEach((tile) => {
         let perpendicularStart = tile.col;
         let perpendicularEnd = tile.col;
-        while (perpendicularStart > 0 && testBoard[tile.row][perpendicularStart - 1] !== null) perpendicularStart--;
-        while (perpendicularEnd < BOARD_SIZE - 1 && testBoard[tile.row][perpendicularEnd + 1] !== null) perpendicularEnd++;
+        while (
+          perpendicularStart > 0 &&
+          testBoard[tile.row][perpendicularStart - 1] !== null
+        )
+          perpendicularStart--;
+        while (
+          perpendicularEnd < BOARD_SIZE - 1 &&
+          testBoard[tile.row][perpendicularEnd + 1] !== null
+        )
+          perpendicularEnd++;
 
         if (perpendicularStart !== perpendicularEnd) {
           const perpWord: Array<{ row: number; col: number }> = [];
@@ -2332,9 +2366,9 @@ const WordGame = () => {
     const words = getIndividualWordPositions(testBoard, tiles);
     const positions: { row: number; col: number }[] = [];
 
-    words.forEach(word => {
-      word.forEach(pos => {
-        if (!positions.some(p => p.row === pos.row && p.col === pos.col)) {
+    words.forEach((word) => {
+      word.forEach((pos) => {
+        if (!positions.some((p) => p.row === pos.row && p.col === pos.col)) {
           positions.push(pos);
         }
       });
@@ -2495,12 +2529,13 @@ const WordGame = () => {
 
       // If no valid placement found, pass
       if (!validPlacement) {
-        const newConsecutivePasses = consecutivePasses + 1;
+        const newOpponentPasses = opponentConsecutivePasses + 1;
 
-        if (newConsecutivePasses >= 6) {
-          // End the game after 6 consecutive passes
+        // End game if both players have passed 3 times consecutively
+        if (newOpponentPasses >= 3 && playerConsecutivePasses >= 3) {
           setGameEnded(true);
-          setConsecutivePasses(0);
+          setOpponentConsecutivePasses(0);
+          setPlayerConsecutivePasses(0);
           setMessage(
             "Game Over! Both players passed 3 times consecutively. " +
               (playerScore > opponentScore
@@ -2513,7 +2548,7 @@ const WordGame = () => {
           return;
         }
 
-        setConsecutivePasses(newConsecutivePasses);
+        setOpponentConsecutivePasses(newOpponentPasses);
         setMessage(getMessage("OpponentPassed"));
         setCurrentPlayer("player");
         setGameMode("normal"); // Reset to normal mode after opponent turn
@@ -2539,7 +2574,12 @@ const WordGame = () => {
       });
 
       // Use shared scoring function - opponent chains off the last played tiles (by either player)
-      const scoring = calculateFullScore(newBoard, opponentPlacedTiles, lastPlayedTiles, opponentComboStreak);
+      const scoring = calculateFullScore(
+        newBoard,
+        opponentPlacedTiles,
+        lastPlayedTiles,
+        opponentComboStreak,
+      );
 
       // Update opponent's combo streak (player's streak is unaffected)
       setOpponentComboStreak(scoring.newComboStreak);
@@ -2549,7 +2589,10 @@ const WordGame = () => {
         highStreak: Math.max(opponentStats.highStreak, scoring.newComboStreak),
         totalScore: opponentStats.totalScore + scoring.finalScore,
         runOuts: opponentStats.runOuts + (scoring.isRunOut ? 1 : 0),
-        bestWordScore: Math.max(opponentStats.bestWordScore, scoring.finalScore),
+        bestWordScore: Math.max(
+          opponentStats.bestWordScore,
+          scoring.finalScore,
+        ),
       });
 
       const usedLetters = validPlacement.word;
@@ -2570,17 +2613,19 @@ const WordGame = () => {
       setOpponentRack([...newOpponentRack, ...newTiles]);
       setTileBag(remainingBag);
       setIsFirstMove(false);
-      setConsecutivePasses(0); // Reset consecutive passes counter
+      setOpponentConsecutivePasses(0); // Reset opponent's consecutive passes counter
       setCurrentPlayer("player");
       // Set all tiles used in the formed words for display and combo chaining
-      const allOpponentTilesUsed = scoring.allWordPositions.map(pos => ({
+      const allOpponentTilesUsed = scoring.allWordPositions.map((pos) => ({
         row: pos.row,
         col: pos.col,
         letter: newBoard[pos.row][pos.col]?.letter as Letter,
       }));
       setLastPlayedTiles(allOpponentTilesUsed);
 
-      let opponentMessage = getMessage("OpponentScoredFormat", { score: scoring.finalScore.toString() });
+      let opponentMessage = getMessage("OpponentScoredFormat", {
+        score: scoring.finalScore.toString(),
+      });
       if (scoring.isCombo) {
         opponentMessage += ` 🔥 ${scoring.comboMultiplier}x COMBO!`;
       }
@@ -2610,7 +2655,12 @@ const WordGame = () => {
     });
 
     // Use shared scoring function - player chains off the last played tiles (by either player)
-    const scoring = calculateFullScore(boardWithPlacedTiles, placedTiles, lastPlayedTiles, playerComboStreak);
+    const scoring = calculateFullScore(
+      boardWithPlacedTiles,
+      placedTiles,
+      lastPlayedTiles,
+      playerComboStreak,
+    );
 
     // Update player's combo streak (opponent's streak is unaffected)
     setPlayerComboStreak(scoring.newComboStreak);
@@ -2646,7 +2696,7 @@ const WordGame = () => {
     setPlayerRack([...playerRack, ...newTiles]);
     setTileBag(remainingBag);
     // Set all tiles used in the formed words for display and combo chaining
-    const allTilesUsed = scoring.allWordPositions.map(pos => ({
+    const allTilesUsed = scoring.allWordPositions.map((pos) => ({
       row: pos.row,
       col: pos.col,
       letter: boardWithPlacedTiles[pos.row][pos.col]?.letter as Letter,
@@ -2680,7 +2730,7 @@ const WordGame = () => {
     setTimerExpired(false); // Reset timer expired flag for next turn
     setTimeRemaining(timerDuration); // Reset timer to full duration
     setGameMode("normal"); // Reset game mode
-    setConsecutivePasses(0); // Reset consecutive passes counter
+    setPlayerConsecutivePasses(0); // Reset player's consecutive passes counter
     setCurrentPlayer("opponent");
 
     setTimeout(() => opponentTurn(), 500);
@@ -2797,13 +2847,14 @@ const WordGame = () => {
       recall();
     }
 
-    // Check if this is the 6th consecutive pass (3 for each player)
-    const newConsecutivePasses = consecutivePasses + 1;
+    // Check if both players have passed 3 times consecutively
+    const newPlayerPasses = playerConsecutivePasses + 1;
 
-    if (newConsecutivePasses >= 6) {
-      // End the game after 6 consecutive passes
+    // End game if both players have passed 3 times consecutively
+    if (newPlayerPasses >= 3 && opponentConsecutivePasses >= 3) {
       setGameEnded(true);
-      setConsecutivePasses(0);
+      setPlayerConsecutivePasses(0);
+      setOpponentConsecutivePasses(0);
       setMessage(
         "Game Over! Both players passed 3 times consecutively. " +
           (playerScore > opponentScore
@@ -2816,13 +2867,13 @@ const WordGame = () => {
       return;
     }
 
-    if (newConsecutivePasses === 5) {
-      // This is the player's 3rd consecutive pass - show warning
+    // Show warning if this pass would allow the game to end on the next opponent pass
+    if (newPlayerPasses >= 3 && opponentConsecutivePasses >= 2) {
       setShowPassWarning(true);
       return;
     }
 
-    setConsecutivePasses(newConsecutivePasses);
+    setPlayerConsecutivePasses(newPlayerPasses);
     setMessage("Turn passed.");
     setTimerExpired(false); // Reset timer expired flag for next turn
     setTimeRemaining(timerDuration); // Reset timer to full duration
@@ -2837,7 +2888,8 @@ const WordGame = () => {
     // User confirmed the final pass - end the game
     setShowPassWarning(false);
     setGameEnded(true);
-    setConsecutivePasses(0);
+    setPlayerConsecutivePasses(0);
+    setOpponentConsecutivePasses(0);
     setMessage(
       "Game Over! Both players passed 3 times consecutively. " +
         (playerScore > opponentScore
@@ -3113,9 +3165,13 @@ const WordGame = () => {
                           </div>
                           <div className="space-y-1">
                             <div className="flex justify-between">
-                              <span className="text-gray-400">High Streak:</span>
+                              <span className="text-gray-400">
+                                High Streak:
+                              </span>
                               <span className="font-semibold">
-                                {playerStats.highStreak > 0 ? `${playerStats.highStreak}x` : '-'}
+                                {playerStats.highStreak > 0
+                                  ? `${playerStats.highStreak}x`
+                                  : "-"}
                               </span>
                             </div>
                             <div className="flex justify-between">
@@ -3140,9 +3196,13 @@ const WordGame = () => {
                           </div>
                           <div className="space-y-1">
                             <div className="flex justify-between">
-                              <span className="text-gray-400">High Streak:</span>
+                              <span className="text-gray-400">
+                                High Streak:
+                              </span>
                               <span className="font-semibold">
-                                {opponentStats.highStreak > 0 ? `${opponentStats.highStreak}x` : '-'}
+                                {opponentStats.highStreak > 0
+                                  ? `${opponentStats.highStreak}x`
+                                  : "-"}
                               </span>
                             </div>
                             <div className="flex justify-between">
