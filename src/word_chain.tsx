@@ -1932,6 +1932,7 @@ const WordGame = () => {
     finalScore: number;
     isRunOut: boolean;
     isCombo: boolean;
+    comboWordCount: number;
     comboMultiplier: number;
     newComboStreak: number;
     allWordPositions: Array<{ row: number; col: number }>;
@@ -1952,27 +1953,34 @@ const WordGame = () => {
       adjustedBaseScore += 50;
     }
 
-    // Get all tile positions used in the formed words (including existing board tiles)
+    // Get individual words and all positions
+    const individualWords = getIndividualWordPositions(currentBoard, tiles);
     const allWordPositions = getWordTilePositions(currentBoard, tiles);
 
-    // Check for combo - does any tile in the formed words match a combo tile position?
-    let isCombo = false;
+    // Count how many words chain off the combo tiles (use tiles from last played word)
+    let comboWordCount = 0;
     if (currentComboTiles.length > 0) {
-      for (const pos of allWordPositions) {
-        if (currentComboTiles.some(combo => combo.row === pos.row && combo.col === pos.col)) {
-          isCombo = true;
-          break;
+      for (const word of individualWords) {
+        // Check if this word uses any of the combo tiles
+        const wordChainsOff = word.some(pos =>
+          currentComboTiles.some(combo => combo.row === pos.row && combo.col === pos.col)
+        );
+        if (wordChainsOff) {
+          comboWordCount++;
         }
       }
     }
 
-    // Calculate combo multiplier
+    const isCombo = comboWordCount > 0;
+
+    // Calculate combo multiplier - streak increases by number of chaining words
     let newComboStreak = 0;
     let comboMultiplier = 1;
     let finalScore = adjustedBaseScore;
 
     if (isCombo) {
-      newComboStreak = currentComboStreak === 0 ? 2 : currentComboStreak + 1;
+      // If starting a new streak, start at 2; otherwise add the combo word count
+      newComboStreak = currentComboStreak === 0 ? 1 + comboWordCount : currentComboStreak + comboWordCount;
       comboMultiplier = newComboStreak;
       finalScore = adjustedBaseScore * comboMultiplier;
     }
@@ -1982,6 +1990,7 @@ const WordGame = () => {
       finalScore,
       isRunOut,
       isCombo,
+      comboWordCount,
       comboMultiplier,
       newComboStreak,
       allWordPositions,
@@ -2225,14 +2234,14 @@ const WordGame = () => {
     return validatePlacement(board, placedTiles, isFirstMove);
   };
 
-  // Helper function to get all tile positions used in formed words
-  const getWordTilePositions = (
+  // Helper function to get individual words as arrays of positions
+  const getIndividualWordPositions = (
     testBoard: (BoardTile | null)[][],
     tiles: PlacedTile[],
-  ): { row: number; col: number }[] => {
-    const positions: { row: number; col: number }[] = [];
+  ): Array<Array<{ row: number; col: number }>> => {
+    const words: Array<Array<{ row: number; col: number }>> = [];
 
-    if (tiles.length === 0) return positions;
+    if (tiles.length === 0) return words;
 
     const rows = tiles.map((t) => t.row);
     const cols = tiles.map((t) => t.col);
@@ -2250,9 +2259,13 @@ const WordGame = () => {
       while (startCol > 0 && testBoard[row][startCol - 1] !== null) startCol--;
       while (endCol < BOARD_SIZE - 1 && testBoard[row][endCol + 1] !== null) endCol++;
 
-      // Add all positions in main word
-      for (let col = startCol; col <= endCol; col++) {
-        positions.push({ row, col });
+      // Add main word if it's more than 1 letter
+      if (endCol - startCol >= 1) {
+        const mainWord: Array<{ row: number; col: number }> = [];
+        for (let col = startCol; col <= endCol; col++) {
+          mainWord.push({ row, col });
+        }
+        words.push(mainWord);
       }
 
       // Check perpendicular words for each placed tile
@@ -2263,11 +2276,11 @@ const WordGame = () => {
         while (perpendicularEnd < BOARD_SIZE - 1 && testBoard[perpendicularEnd + 1][tile.col] !== null) perpendicularEnd++;
 
         if (perpendicularStart !== perpendicularEnd) {
+          const perpWord: Array<{ row: number; col: number }> = [];
           for (let r = perpendicularStart; r <= perpendicularEnd; r++) {
-            if (!positions.some(p => p.row === r && p.col === tile.col)) {
-              positions.push({ row: r, col: tile.col });
-            }
+            perpWord.push({ row: r, col: tile.col });
           }
+          words.push(perpWord);
         }
       });
     } else {
@@ -2282,9 +2295,13 @@ const WordGame = () => {
       while (startRow > 0 && testBoard[startRow - 1][col] !== null) startRow--;
       while (endRow < BOARD_SIZE - 1 && testBoard[endRow + 1][col] !== null) endRow++;
 
-      // Add all positions in main word
-      for (let row = startRow; row <= endRow; row++) {
-        positions.push({ row, col });
+      // Add main word if it's more than 1 letter
+      if (endRow - startRow >= 1) {
+        const mainWord: Array<{ row: number; col: number }> = [];
+        for (let row = startRow; row <= endRow; row++) {
+          mainWord.push({ row, col });
+        }
+        words.push(mainWord);
       }
 
       // Check perpendicular words for each placed tile
@@ -2295,14 +2312,33 @@ const WordGame = () => {
         while (perpendicularEnd < BOARD_SIZE - 1 && testBoard[tile.row][perpendicularEnd + 1] !== null) perpendicularEnd++;
 
         if (perpendicularStart !== perpendicularEnd) {
+          const perpWord: Array<{ row: number; col: number }> = [];
           for (let c = perpendicularStart; c <= perpendicularEnd; c++) {
-            if (!positions.some(p => p.row === tile.row && p.col === c)) {
-              positions.push({ row: tile.row, col: c });
-            }
+            perpWord.push({ row: tile.row, col: c });
           }
+          words.push(perpWord);
         }
       });
     }
+
+    return words;
+  };
+
+  // Helper function to get all tile positions used in formed words (flattened)
+  const getWordTilePositions = (
+    testBoard: (BoardTile | null)[][],
+    tiles: PlacedTile[],
+  ): { row: number; col: number }[] => {
+    const words = getIndividualWordPositions(testBoard, tiles);
+    const positions: { row: number; col: number }[] = [];
+
+    words.forEach(word => {
+      word.forEach(pos => {
+        if (!positions.some(p => p.row === pos.row && p.col === pos.col)) {
+          positions.push(pos);
+        }
+      });
+    });
 
     return positions;
   };
@@ -2893,7 +2929,7 @@ const WordGame = () => {
             <span className="text-2xl sm:text-3xl">🐂</span>
             Word Chain
             <span className="text-[0.5rem] sm:text-xs text-gray-500 font-normal self-end mb-0.5">
-              v26.01.25.22.32
+              v26.01.25.22.42
             </span>
           </h1>
           <div className="flex items-center gap-2">
