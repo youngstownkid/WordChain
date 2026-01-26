@@ -2383,6 +2383,7 @@ const WordGame = () => {
       const currentBoard = board.map((r) => [...r]);
       const currentOpponentRack = [...opponentRack];
       const currentTileBag = [...tileBag];
+      const currentLastPlayedTiles = [...lastPlayedTiles];
 
       // Helper function to check if a position touches an existing tile
       const touchesExistingTile = (
@@ -2454,11 +2455,11 @@ const WordGame = () => {
         length: number,
         isHorizontal: boolean,
       ): boolean => {
-        if (lastPlayedTiles.length === 0) return false;
+        if (currentLastPlayedTiles.length === 0) return false;
         for (let i = 0; i < length; i++) {
           const checkRow = isHorizontal ? row : row + i;
           const checkCol = isHorizontal ? col + i : col;
-          for (const tile of lastPlayedTiles) {
+          for (const tile of currentLastPlayedTiles) {
             if (
               (tile.row === checkRow - 1 && tile.col === checkCol) ||
               (tile.row === checkRow + 1 && tile.col === checkCol) ||
@@ -2752,7 +2753,7 @@ const WordGame = () => {
       const scoring = calculateFullScore(
         newBoard,
         opponentPlacedTiles,
-        lastPlayedTiles,
+        currentLastPlayedTiles,
         opponentComboStreak,
       );
 
