@@ -390,8 +390,8 @@ const createWelcomeBoard = (): (BoardTile | null)[][] => {
     .fill(null)
     .map(() => Array(BOARD_SIZE).fill(null));
 
-  // Spell "SCRABBULL" horizontally in the middle
-  const word = "SCRABBULL";
+  // Spell "WORDCHAIN" horizontally in the middle
+  const word = "WORDCHAIN";
   const startRow = 7;
   const startCol = 3;
 
@@ -470,6 +470,7 @@ const WordGame = () => {
   const [opponentConsecutivePasses, setOpponentConsecutivePasses] =
     useState<number>(0); // Tracks consecutive passes opponent
   const [showPassWarning, setShowPassWarning] = useState<boolean>(false); // Shows warning before final pass
+  const [showQuitConfirm, setShowQuitConfirm] = useState<boolean>(false); // Shows quit confirmation dialog
   const [statsExpanded, setStatsExpanded] = useState<boolean>(false); // Details section collapsed by default
   const [playerComboStreak, setPlayerComboStreak] = useState<number>(0); // Player's combo streak (0 = no combo, 2+ = active)
   const [opponentComboStreak, setOpponentComboStreak] = useState<number>(0); // Opponent's combo streak (0 = no combo, 2+ = active)
@@ -920,7 +921,11 @@ const WordGame = () => {
       setMessage(getMessage("YourTurn"));
     } else {
       setMessage(getMessage("OpponentGoesFirst"));
-      setTimeout(() => opponentTurn(), 1000);
+      // Pass the new board and rack directly since state won't be updated yet
+      setTimeout(
+        () => opponentTurn(newBoard, opponentStartRack, remainingBag),
+        1000,
+      );
     }
   };
 
@@ -1758,7 +1763,7 @@ const WordGame = () => {
       case "DL":
         return "DL";
       case "center":
-        return <span className="text-base sm:text-lg md:text-xl">🤘🐂🤘</span>;
+        return <span className="text-base sm:text-lg md:text-xl">⭐</span>;
       default:
         return "";
     }
@@ -2377,13 +2382,27 @@ const WordGame = () => {
     return positions;
   };
 
-  const opponentTurn = () => {
+  const opponentTurn = (
+    initialBoard?: (BoardTile | null)[][],
+    initialOpponentRack?: Letter[],
+    initialTileBag?: Letter[],
+    initialLastPlayedTiles?: PlacedTile[],
+  ) => {
     setTimeout(async () => {
-      // Deep copy state to avoid stale closure references
-      const currentBoard = board.map((r) => [...r]);
-      const currentOpponentRack = [...opponentRack];
-      const currentTileBag = [...tileBag];
-      const currentLastPlayedTiles = [...lastPlayedTiles];
+      // Use provided initial state or fall back to current state
+      // This handles the case where opponentTurn is called immediately after state changes
+      const currentBoard = initialBoard
+        ? initialBoard.map((r) => [...r])
+        : board.map((r) => [...r]);
+      const currentOpponentRack = initialOpponentRack
+        ? [...initialOpponentRack]
+        : [...opponentRack];
+      const currentTileBag = initialTileBag
+        ? [...initialTileBag]
+        : [...tileBag];
+      const currentLastPlayedTiles = initialLastPlayedTiles
+        ? [...initialLastPlayedTiles]
+        : [...lastPlayedTiles];
 
       // Helper function to check if a position touches an existing tile
       const touchesExistingTile = (
@@ -2487,7 +2506,8 @@ const WordGame = () => {
           if (col < BOARD_SIZE - 1 && currentBoard[r][col + 1] !== null)
             return true;
           // Check above (only for first tile)
-          if (i === 0 && r > 0 && currentBoard[r - 1][col] !== null) return true;
+          if (i === 0 && r > 0 && currentBoard[r - 1][col] !== null)
+            return true;
           // Check below (only for last tile)
           if (
             i === length - 1 &&
@@ -2536,8 +2556,17 @@ const WordGame = () => {
             if (allEmpty) {
               if (isBoardEmpty) {
                 const center = Math.floor(BOARD_SIZE / 2);
-                if (r === center && c <= center && c + wordLength - 1 >= center) {
-                  spots.push({ row: r, col: c, isHorizontal: true, isCombo: false });
+                if (
+                  r === center &&
+                  c <= center &&
+                  c + wordLength - 1 >= center
+                ) {
+                  spots.push({
+                    row: r,
+                    col: c,
+                    isHorizontal: true,
+                    isCombo: false,
+                  });
                 }
               } else if (touchesExistingTile(r, c, wordLength)) {
                 const isCombo = touchesLastPlayedTiles(r, c, wordLength, true);
@@ -2560,8 +2589,17 @@ const WordGame = () => {
             if (allEmpty) {
               if (isBoardEmpty) {
                 const center = Math.floor(BOARD_SIZE / 2);
-                if (c === center && r <= center && r + wordLength - 1 >= center) {
-                  spots.push({ row: r, col: c, isHorizontal: false, isCombo: false });
+                if (
+                  c === center &&
+                  r <= center &&
+                  r + wordLength - 1 >= center
+                ) {
+                  spots.push({
+                    row: r,
+                    col: c,
+                    isHorizontal: false,
+                    isCombo: false,
+                  });
                 }
               } else if (touchesExistingTileVertical(r, c, wordLength)) {
                 const isCombo = touchesLastPlayedTiles(r, c, wordLength, false);
@@ -2576,6 +2614,60 @@ const WordGame = () => {
           if (a.isCombo !== b.isCombo) return a.isCombo ? -1 : 1;
           return Math.random() - 0.5;
         });
+
+        // For advanced/expert: collect valid placements and score them defensively
+        const isDefensiveMode =
+          difficulty === "advanced" || difficulty === "expert";
+        const validPlacements: Array<{
+          spot: { row: number; col: number };
+          word: Letter[];
+          wordLength: number;
+          isHorizontal: boolean;
+          defensiveScore: number;
+        }> = [];
+
+        // Helper to count exposed edges (places where player could chain)
+        const countExposedEdges = (
+          testBoard: (BoardTile | null)[][],
+          placedTiles: PlacedTile[],
+        ): number => {
+          let exposedCount = 0;
+          for (const tile of placedTiles) {
+            // Check all 4 directions for empty spaces that could be chained
+            const directions = [
+              { dr: -1, dc: 0 },
+              { dr: 1, dc: 0 },
+              { dr: 0, dc: -1 },
+              { dr: 0, dc: 1 },
+            ];
+            for (const { dr, dc } of directions) {
+              const nr = tile.row + dr;
+              const nc = tile.col + dc;
+              if (
+                nr >= 0 &&
+                nr < BOARD_SIZE &&
+                nc >= 0 &&
+                nc < BOARD_SIZE &&
+                testBoard[nr][nc] === null
+              ) {
+                // Check if this empty space has room to extend into a word
+                // (at least one more empty space in the same direction)
+                const nnr = nr + dr;
+                const nnc = nc + dc;
+                if (
+                  nnr >= 0 &&
+                  nnr < BOARD_SIZE &&
+                  nnc >= 0 &&
+                  nnc < BOARD_SIZE &&
+                  testBoard[nnr][nnc] === null
+                ) {
+                  exposedCount++;
+                }
+              }
+            }
+          }
+          return exposedCount;
+        };
 
         // Try each spot
         for (const spot of spots) {
@@ -2599,14 +2691,53 @@ const WordGame = () => {
           );
 
           if (validation.valid) {
-            validPlacement = {
-              spot: { row: spot.row, col: spot.col },
-              word,
-              wordLength,
-              isHorizontal: spot.isHorizontal,
-            };
-            break;
+            if (isDefensiveMode) {
+              // Calculate defensive score (lower exposed edges = better)
+              const exposedEdges = countExposedEdges(testBoard, testTiles);
+              // Prefer combo spots, then fewer exposed edges
+              const defensiveScore =
+                (spot.isCombo ? 1000 : 0) +
+                (100 - exposedEdges) +
+                wordLength * 10; // Prefer longer words too
+              validPlacements.push({
+                spot: { row: spot.row, col: spot.col },
+                word,
+                wordLength,
+                isHorizontal: spot.isHorizontal,
+                defensiveScore,
+              });
+              // For expert, collect more options before deciding
+              if (difficulty === "expert" && validPlacements.length < 5) {
+                continue;
+              }
+              // For advanced, take first few good options
+              if (difficulty === "advanced" && validPlacements.length < 3) {
+                continue;
+              }
+            } else {
+              // Beginner/Intermediate: take first valid placement
+              validPlacement = {
+                spot: { row: spot.row, col: spot.col },
+                word,
+                wordLength,
+                isHorizontal: spot.isHorizontal,
+              };
+              break;
+            }
           }
+        }
+
+        // For defensive modes, pick the best placement from collected options
+        if (isDefensiveMode && validPlacements.length > 0 && !validPlacement) {
+          // Sort by defensive score (highest first)
+          validPlacements.sort((a, b) => b.defensiveScore - a.defensiveScore);
+          const best = validPlacements[0];
+          validPlacement = {
+            spot: best.spot,
+            word: best.word,
+            wordLength: best.wordLength,
+            isHorizontal: best.isHorizontal,
+          };
         }
       }
 
@@ -2912,7 +3043,17 @@ const WordGame = () => {
     setPlayerConsecutivePasses(0); // Reset consecutive passes counter
     setCurrentPlayer("opponent");
 
-    setTimeout(() => opponentTurn(), 500);
+    // Pass the updated board and lastPlayedTiles to avoid stale closure issues
+    setTimeout(
+      () =>
+        opponentTurn(
+          boardWithPlacedTiles,
+          undefined,
+          remainingBag,
+          allTilesUsed,
+        ),
+      500,
+    );
   };
 
   const recall = () => {
@@ -3155,7 +3296,7 @@ const WordGame = () => {
       <div className="max-w-7xl mx-auto">
         <div className="flex justify-between items-center mb-2 sm:mb-4">
           <h1 className="text-xl sm:text-2xl font-bold flex items-center gap-2">
-            <span className="text-2xl sm:text-3xl">🐂</span>
+            <span className="text-2xl sm:text-3xl">🔥</span>
             Word Chain
             <span className="text-[0.5rem] sm:text-xs text-gray-500 font-normal self-end mb-0.5">
               v{__APP_VERSION__}
@@ -3176,7 +3317,7 @@ const WordGame = () => {
               </button>
             ) : (
               <button
-                onClick={quitGame}
+                onClick={() => setShowQuitConfirm(true)}
                 className={`p-2 rounded-lg ${
                   darkMode
                     ? "bg-red-700 hover:bg-red-600"
@@ -4114,6 +4255,45 @@ const WordGame = () => {
                   }`}
                 >
                   End Game
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {showQuitConfirm && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+            <div className={`${boardBg} p-6 rounded-lg max-w-md w-full`}>
+              <h2 className="text-xl font-bold mb-4 text-center">
+                Quit Game?
+              </h2>
+              <p className="mb-6 text-center">
+                Are you sure you want to quit the current game? Your progress
+                will be lost.
+              </p>
+              <div className="flex gap-3">
+                <button
+                  onClick={() => setShowQuitConfirm(false)}
+                  className={`flex-1 py-3 rounded-lg font-semibold ${
+                    darkMode
+                      ? "bg-gray-700 hover:bg-gray-600"
+                      : "bg-gray-500 hover:bg-gray-600 text-white"
+                  }`}
+                >
+                  Continue Playing
+                </button>
+                <button
+                  onClick={() => {
+                    setShowQuitConfirm(false);
+                    quitGame();
+                  }}
+                  className={`flex-1 py-3 rounded-lg font-semibold ${
+                    darkMode
+                      ? "bg-red-700 hover:bg-red-600"
+                      : "bg-red-500 hover:bg-red-600 text-white"
+                  }`}
+                >
+                  Quit Game
                 </button>
               </div>
             </div>
