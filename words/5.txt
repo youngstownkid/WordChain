@@ -355,6 +355,7 @@ areas
 areca
 areic
 arena
+arepa
 arete
 argal
 argil

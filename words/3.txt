@@ -233,6 +233,7 @@ ell
 elm
 els
 eme
+emo
 emf
 ems
 emu
@@ -542,6 +543,7 @@ mob
 moc
 mod
 mog
+moi
 mol
 mom
 mon
@@ -635,6 +637,7 @@ our
 out
 ova
 owe
+owt
 owl
 own
 oxo
@@ -784,6 +787,7 @@ shh
 shy
 sib
 sic
+sig
 sim
 sin
 sip
