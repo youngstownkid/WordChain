@@ -527,10 +527,25 @@ const WordGame = () => {
     col: number;
     time: number;
   } | null>(null);
-  const [recallingTile, setRecallingTile] = useState<{
-    row: number;
-    col: number;
-  } | null>(null);
+  const [recallingTiles, setRecallingTiles] = useState<
+    {
+      row: number;
+      col: number;
+    }[]
+  >([]);
+  const [flyingTiles, setFlyingTiles] = useState<
+    {
+      id: string;
+      letter: Letter;
+      startX: number;
+      startY: number;
+      endX: number;
+      endY: number;
+      startSize: number;
+      endSize: number;
+      delay: number;
+    }[]
+  >([]);
 
   useEffect(() => {
     // Only load messages on mount, not the word list
@@ -1245,10 +1260,8 @@ const WordGame = () => {
       if (currentPlayer !== "player") return;
 
       // Check if this tile is a placed tile (not a permanent one)
-      const isPlacedTile = placedTiles.some(
-        (t) => t.row === row && t.col === col,
-      );
-      if (!isPlacedTile) return;
+      const tile = placedTiles.find((t) => t.row === row && t.col === col);
+      if (!tile) return;
 
       const now = Date.now();
       const DOUBLE_TAP_THRESHOLD = 300; // ms
@@ -1259,30 +1272,78 @@ const WordGame = () => {
         lastTapInfo.col === col &&
         now - lastTapInfo.time < DOUBLE_TAP_THRESHOLD
       ) {
-        // Double tap detected - recall this tile with animation
-        setRecallingTile({ row, col });
+        // Double tap detected - recall this tile with flying animation
         setLastTapInfo(null);
 
-        // After animation completes, actually move the tile
-        setTimeout(() => {
-          const tile = placedTiles.find((t) => t.row === row && t.col === col);
-          if (tile) {
+        // Find the board cell element to get its position
+        const boardCell = document.querySelector(
+          `[data-board-cell][data-row="${row}"][data-col="${col}"]`,
+        );
+        const rackContainer = rackRef.current;
+
+        if (boardCell && rackContainer) {
+          const cellRect = boardCell.getBoundingClientRect();
+          const rackRect = rackContainer.getBoundingClientRect();
+
+          // Calculate the target position (end of rack)
+          const rackTileWidth = 48; // sm:w-12 = 48px
+          const targetX = rackRect.right - rackTileWidth / 2;
+          const targetY = rackRect.top + rackRect.height / 2;
+
+          // Start flying animation
+          setFlyingTiles([
+            {
+              id: `${row}-${col}`,
+              letter: tile.letter,
+              startX: cellRect.left + cellRect.width / 2,
+              startY: cellRect.top + cellRect.height / 2,
+              endX: targetX,
+              endY: targetY,
+              startSize: cellRect.width,
+              endSize: rackTileWidth,
+              delay: 0,
+            },
+          ]);
+
+          // Hide the original tile
+          setRecallingTiles([{ row, col }]);
+
+          // After animation completes, actually move the tile
+          setTimeout(() => {
             // Remove from board
             const newBoard = board.map((r) => [...r]);
             newBoard[row][col] = null;
             setBoard(newBoard);
 
             // Remove from placed tiles
-            setPlacedTiles(placedTiles.filter((t) => !(t.row === row && t.col === col)));
+            setPlacedTiles(
+              placedTiles.filter((t) => !(t.row === row && t.col === col)),
+            );
 
             // Add back to rack
             setPlayerRack([...playerRack, tile.letter]);
 
             // Clear invalid tiles if this was one
-            setInvalidTiles(invalidTiles.filter((t) => !(t.row === row && t.col === col)));
-          }
-          setRecallingTile(null);
-        }, 300); // Match animation duration
+            setInvalidTiles(
+              invalidTiles.filter((t) => !(t.row === row && t.col === col)),
+            );
+
+            setRecallingTiles([]);
+            setFlyingTiles([]);
+          }, 400); // Match animation duration
+        } else {
+          // Fallback if we can't find elements - just move instantly
+          const newBoard = board.map((r) => [...r]);
+          newBoard[row][col] = null;
+          setBoard(newBoard);
+          setPlacedTiles(
+            placedTiles.filter((t) => !(t.row === row && t.col === col)),
+          );
+          setPlayerRack([...playerRack, tile.letter]);
+          setInvalidTiles(
+            invalidTiles.filter((t) => !(t.row === row && t.col === col)),
+          );
+        }
       } else {
         // First tap - record it
         setLastTapInfo({ row, col, time: now });
@@ -2855,7 +2916,11 @@ const WordGame = () => {
             } else {
               // Must connect to existing tiles OR use existing tiles
               const usesExistingTile = tilesNeeded.length < wordLength;
-              const touchesExisting = touchesExistingTileVertical(r, c, wordLength);
+              const touchesExisting = touchesExistingTileVertical(
+                r,
+                c,
+                wordLength,
+              );
 
               if (usesExistingTile || touchesExisting) {
                 const isCombo = touchesLastPlayedTiles(r, c, wordLength, false);
@@ -2922,9 +2987,10 @@ const WordGame = () => {
 
             // Combo is CRITICAL - multiply base importance by current streak potential
             if (spot.isCombo) {
-              const comboMultiplier = opponentComboStreak === 0
-                ? 2 // Starting a new combo
-                : opponentComboStreak + placementScoring.comboWordCount; // Continuing combo
+              const comboMultiplier =
+                opponentComboStreak === 0
+                  ? 2 // Starting a new combo
+                  : opponentComboStreak + placementScoring.comboWordCount; // Continuing combo
               score += 50000 * comboMultiplier; // Massive combo bonus
             }
 
@@ -3341,19 +3407,84 @@ const WordGame = () => {
   };
 
   const recall = () => {
-    const newBoard = board.map((r) => [...r]);
-    const lettersToReturn: Letter[] = [];
+    if (placedTiles.length === 0) return;
 
-    placedTiles.forEach(({ row, col, letter }) => {
-      newBoard[row][col] = null;
-      lettersToReturn.push(letter);
+    const rackContainer = rackRef.current;
+    if (!rackContainer) {
+      // Fallback - instant recall without animation
+      const newBoard = board.map((r) => [...r]);
+      const lettersToReturn: Letter[] = [];
+      placedTiles.forEach(({ row, col, letter }) => {
+        newBoard[row][col] = null;
+        lettersToReturn.push(letter);
+      });
+      setBoard(newBoard);
+      setPlayerRack([...playerRack, ...lettersToReturn]);
+      setPlacedTiles([]);
+      setInvalidTiles([]);
+      setMessage(getMessage("TilesRecalled"));
+      return;
+    }
+
+    const rackRect = rackContainer.getBoundingClientRect();
+    const rackTileWidth = 48; // sm:w-12 = 48px
+
+    // Build flying tiles array with staggered delays
+    const newFlyingTiles: typeof flyingTiles = [];
+    const tilesToRecall: { row: number; col: number }[] = [];
+
+    placedTiles.forEach((tile, index) => {
+      const boardCell = document.querySelector(
+        `[data-board-cell][data-row="${tile.row}"][data-col="${tile.col}"]`,
+      );
+
+      if (boardCell) {
+        const cellRect = boardCell.getBoundingClientRect();
+        // Stagger target positions slightly so tiles fan out
+        const targetX = rackRect.right - rackTileWidth / 2 - index * 5;
+        const targetY = rackRect.top + rackRect.height / 2;
+
+        newFlyingTiles.push({
+          id: `${tile.row}-${tile.col}`,
+          letter: tile.letter,
+          startX: cellRect.left + cellRect.width / 2,
+          startY: cellRect.top + cellRect.height / 2,
+          endX: targetX,
+          endY: targetY,
+          startSize: cellRect.width,
+          endSize: rackTileWidth,
+          delay: index * 50, // 50ms stagger between each tile
+        });
+
+        tilesToRecall.push({ row: tile.row, col: tile.col });
+      }
     });
 
-    setBoard(newBoard);
-    setPlayerRack([...playerRack, ...lettersToReturn]);
-    setPlacedTiles([]);
-    setInvalidTiles([]);
-    setMessage(getMessage("TilesRecalled"));
+    // Start animations
+    setFlyingTiles(newFlyingTiles);
+    setRecallingTiles(tilesToRecall);
+
+    // Calculate total animation time (last tile delay + animation duration)
+    const totalAnimationTime = (placedTiles.length - 1) * 50 + 400;
+
+    // After all animations complete, actually move the tiles
+    setTimeout(() => {
+      const newBoard = board.map((r) => [...r]);
+      const lettersToReturn: Letter[] = [];
+
+      placedTiles.forEach(({ row, col, letter }) => {
+        newBoard[row][col] = null;
+        lettersToReturn.push(letter);
+      });
+
+      setBoard(newBoard);
+      setPlayerRack([...playerRack, ...lettersToReturn]);
+      setPlacedTiles([]);
+      setInvalidTiles([]);
+      setRecallingTiles([]);
+      setFlyingTiles([]);
+      setMessage(getMessage("TilesRecalled"));
+    }, totalAnimationTime);
   };
 
   const randomizeTiles = () => {
@@ -4007,12 +4138,12 @@ const WordGame = () => {
                                 setDragOffset(positionInGroup);
                               }
                             }}
-                            className={`w-8 h-8 sm:w-10 sm:h-10 md:w-12 md:h-12 lg:w-9 lg:h-9 xl:w-11 xl:h-11 flex flex-col items-center justify-center rounded font-bold cursor-pointer ${tileBg} text-white transition-all hover:opacity-80`}
+                            className={`w-8 h-8 sm:w-10 sm:h-10 md:w-12 md:h-12 lg:w-9 lg:h-9 xl:w-11 xl:h-11 flex items-center justify-center rounded font-bold cursor-pointer ${tileBg} text-white transition-all hover:opacity-80 relative`}
                           >
-                            <div className="text-sm sm:text-lg md:text-xl lg:text-lg xl:text-2xl leading-none">
+                            <div className="text-lg sm:text-2xl md:text-3xl lg:text-2xl xl:text-3xl leading-none">
                               {playerRack[tileIndex]}
                             </div>
-                            <div className="text-[0.3rem] sm:text-[0.4rem] md:text-[0.45rem] lg:text-[0.4rem] xl:text-[0.45rem]">
+                            <div className="absolute bottom-0.5 right-0.5 text-[0.35rem] sm:text-[0.45rem] md:text-[0.5rem] lg:text-[0.45rem] xl:text-[0.5rem] opacity-80">
                               {LETTER_SCORES[playerRack[tileIndex]]}
                             </div>
                           </div>
@@ -4054,7 +4185,7 @@ const WordGame = () => {
                       }}
                       onTouchMove={handleTouchMove}
                       onTouchEnd={handleTouchEnd}
-                      className={`w-10 h-10 sm:w-12 sm:h-12 flex flex-col items-center justify-center rounded-lg font-bold touch-none ${
+                      className={`w-10 h-10 sm:w-12 sm:h-12 flex items-center justify-center rounded-lg font-bold touch-none relative ${
                         multiSelectMode || isSwapMode
                           ? "cursor-pointer"
                           : "cursor-move"
@@ -4070,10 +4201,10 @@ const WordGame = () => {
                           : ""
                       }`}
                     >
-                      <div className="text-xl sm:text-3xl leading-none">
+                      <div className="text-2xl sm:text-4xl leading-none">
                         {letter}
                       </div>
-                      <div className="text-[0.5rem] sm:text-[0.6rem]">
+                      <div className="absolute bottom-0.5 right-1 text-[0.5rem] sm:text-[0.6rem] opacity-80">
                         {LETTER_SCORES[letter]}
                       </div>
                     </div>
@@ -4084,35 +4215,92 @@ const WordGame = () => {
 
             {/* Action Buttons - Only show when game is active */}
             {gameStarted && !gameEnded && (
-            <div className="flex flex-col gap-2">
-              {/* Top row: Conditional buttons based on game mode */}
-              <div className="flex gap-2">
-                {isSwapMode ? (
-                  // Swap mode: Show Swap and Cancel/Pass buttons (Pass if in forceSwapPass mode)
-                  <>
-                    <button
-                      onClick={swapTiles}
-                      disabled={
-                        currentPlayer !== "player" || selectedTiles.length === 0
-                      }
-                      className={`flex-1 py-2 sm:py-3 rounded-lg font-semibold flex items-center justify-center gap-1 text-xs sm:text-sm ${
-                        currentPlayer !== "player" || selectedTiles.length === 0
-                          ? darkMode
-                            ? "bg-gray-700 text-gray-500"
-                            : "bg-gray-300 text-gray-400"
-                          : darkMode
-                            ? "bg-orange-700 hover:bg-orange-600"
-                            : "bg-orange-500 hover:bg-orange-600 text-white"
-                      }`}
-                    >
-                      <RefreshCw size={16} className="sm:w-4 sm:h-4" />
-                      Swap{" "}
-                      {selectedTiles.length > 0
-                        ? `(${selectedTiles.length})`
-                        : ""}
-                    </button>
-                    {gameMode === "forceSwapPass" ? (
-                      // In forced mode, show Pass button instead of Cancel
+              <div className="flex flex-col gap-2">
+                {/* Top row: Conditional buttons based on game mode */}
+                <div className="flex gap-2">
+                  {isSwapMode ? (
+                    // Swap mode: Show Swap and Cancel/Pass buttons (Pass if in forceSwapPass mode)
+                    <>
+                      <button
+                        onClick={swapTiles}
+                        disabled={
+                          currentPlayer !== "player" ||
+                          selectedTiles.length === 0
+                        }
+                        className={`flex-1 py-2 sm:py-3 rounded-lg font-semibold flex items-center justify-center gap-1 text-xs sm:text-sm ${
+                          currentPlayer !== "player" ||
+                          selectedTiles.length === 0
+                            ? darkMode
+                              ? "bg-gray-700 text-gray-500"
+                              : "bg-gray-300 text-gray-400"
+                            : darkMode
+                              ? "bg-orange-700 hover:bg-orange-600"
+                              : "bg-orange-500 hover:bg-orange-600 text-white"
+                        }`}
+                      >
+                        <RefreshCw size={16} className="sm:w-4 sm:h-4" />
+                        Swap{" "}
+                        {selectedTiles.length > 0
+                          ? `(${selectedTiles.length})`
+                          : ""}
+                      </button>
+                      {gameMode === "forceSwapPass" ? (
+                        // In forced mode, show Pass button instead of Cancel
+                        <button
+                          onClick={pass}
+                          disabled={currentPlayer !== "player"}
+                          className={`flex-1 py-2 sm:py-3 rounded-lg font-semibold flex items-center justify-center gap-1 text-xs sm:text-sm ${
+                            currentPlayer !== "player"
+                              ? darkMode
+                                ? "bg-gray-700 text-gray-500"
+                                : "bg-gray-300 text-gray-400"
+                              : darkMode
+                                ? "bg-yellow-700 hover:bg-yellow-600"
+                                : "bg-yellow-500 hover:bg-yellow-600 text-white"
+                          }`}
+                        >
+                          <SkipForward size={16} className="sm:w-4 sm:h-4" />
+                          Pass
+                        </button>
+                      ) : (
+                        // In normal swap mode, show Cancel button
+                        <button
+                          onClick={cancelSwap}
+                          disabled={currentPlayer !== "player"}
+                          className={`flex-1 py-2 sm:py-3 rounded-lg font-semibold flex items-center justify-center gap-1 text-xs sm:text-sm ${
+                            currentPlayer !== "player"
+                              ? darkMode
+                                ? "bg-gray-700 text-gray-500"
+                                : "bg-gray-300 text-gray-400"
+                              : darkMode
+                                ? "bg-gray-700 hover:bg-gray-600"
+                                : "bg-gray-500 hover:bg-gray-600 text-white"
+                          }`}
+                        >
+                          <X size={16} className="sm:w-4 sm:h-4" />
+                          Cancel
+                        </button>
+                      )}
+                    </>
+                  ) : gameMode === "forceSwapPass" ? (
+                    // Force Swap/Pass mode: Only show Swap and Pass buttons (when timer expired)
+                    <>
+                      <button
+                        onClick={swapTiles}
+                        disabled={currentPlayer !== "player"}
+                        className={`flex-1 py-2 sm:py-3 rounded-lg font-semibold flex items-center justify-center gap-1 text-xs sm:text-sm ${
+                          currentPlayer !== "player"
+                            ? darkMode
+                              ? "bg-gray-700 text-gray-500"
+                              : "bg-gray-300 text-gray-400"
+                            : darkMode
+                              ? "bg-orange-700 hover:bg-orange-600"
+                              : "bg-orange-500 hover:bg-orange-600 text-white"
+                        }`}
+                      >
+                        <RefreshCw size={16} className="sm:w-4 sm:h-4" />
+                        Swap
+                      </button>
                       <button
                         onClick={pass}
                         disabled={currentPlayer !== "player"}
@@ -4129,137 +4317,102 @@ const WordGame = () => {
                         <SkipForward size={16} className="sm:w-4 sm:h-4" />
                         Pass
                       </button>
-                    ) : (
-                      // In normal swap mode, show Cancel button
+                    </>
+                  ) : (
+                    // Normal mode: Show all regular buttons
+                    <>
                       <button
-                        onClick={cancelSwap}
-                        disabled={currentPlayer !== "player"}
+                        onClick={() => {
+                          if (!multiSelectMode) {
+                            setMultiSelectMode(true);
+                            setGameMode("group");
+                            setMessage(getMessage("GroupModeActivated"));
+                          } else {
+                            setMultiSelectMode(false);
+                            setGameMode("normal");
+                            setSelectedTiles([]);
+                            setOrientation("horizontal");
+                            setMessage("");
+                          }
+                        }}
+                        disabled={
+                          currentPlayer !== "player" || placedTiles.length > 0
+                        }
                         className={`flex-1 py-2 sm:py-3 rounded-lg font-semibold flex items-center justify-center gap-1 text-xs sm:text-sm ${
-                          currentPlayer !== "player"
+                          currentPlayer !== "player" || placedTiles.length > 0
                             ? darkMode
                               ? "bg-gray-700 text-gray-500"
                               : "bg-gray-300 text-gray-400"
-                            : darkMode
-                              ? "bg-gray-700 hover:bg-gray-600"
-                              : "bg-gray-500 hover:bg-gray-600 text-white"
+                            : multiSelectMode
+                              ? darkMode
+                                ? "bg-blue-600 hover:bg-blue-500 ring-2 ring-blue-400"
+                                : "bg-blue-500 hover:bg-blue-400 text-white ring-2 ring-blue-300"
+                              : darkMode
+                                ? "bg-purple-700 hover:bg-purple-600"
+                                : "bg-purple-500 hover:bg-purple-600 text-white"
                         }`}
                       >
-                        <X size={16} className="sm:w-4 sm:h-4" />
-                        Cancel
+                        {multiSelectMode ? "Ungroup" : "Group"}
                       </button>
-                    )}
-                  </>
-                ) : gameMode === "forceSwapPass" ? (
-                  // Force Swap/Pass mode: Only show Swap and Pass buttons (when timer expired)
-                  <>
-                    <button
-                      onClick={swapTiles}
-                      disabled={currentPlayer !== "player"}
-                      className={`flex-1 py-2 sm:py-3 rounded-lg font-semibold flex items-center justify-center gap-1 text-xs sm:text-sm ${
-                        currentPlayer !== "player"
-                          ? darkMode
-                            ? "bg-gray-700 text-gray-500"
-                            : "bg-gray-300 text-gray-400"
-                          : darkMode
-                            ? "bg-orange-700 hover:bg-orange-600"
-                            : "bg-orange-500 hover:bg-orange-600 text-white"
-                      }`}
-                    >
-                      <RefreshCw size={16} className="sm:w-4 sm:h-4" />
-                      Swap
-                    </button>
-                    <button
-                      onClick={pass}
-                      disabled={currentPlayer !== "player"}
-                      className={`flex-1 py-2 sm:py-3 rounded-lg font-semibold flex items-center justify-center gap-1 text-xs sm:text-sm ${
-                        currentPlayer !== "player"
-                          ? darkMode
-                            ? "bg-gray-700 text-gray-500"
-                            : "bg-gray-300 text-gray-400"
-                          : darkMode
-                            ? "bg-yellow-700 hover:bg-yellow-600"
-                            : "bg-yellow-500 hover:bg-yellow-600 text-white"
-                      }`}
-                    >
-                      <SkipForward size={16} className="sm:w-4 sm:h-4" />
-                      Pass
-                    </button>
-                  </>
-                ) : (
-                  // Normal mode: Show all regular buttons
-                  <>
-                    <button
-                      onClick={() => {
-                        if (!multiSelectMode) {
-                          setMultiSelectMode(true);
-                          setGameMode("group");
-                          setMessage(getMessage("GroupModeActivated"));
-                        } else {
-                          setMultiSelectMode(false);
-                          setGameMode("normal");
-                          setSelectedTiles([]);
-                          setOrientation("horizontal");
-                          setMessage("");
-                        }
-                      }}
-                      disabled={
-                        currentPlayer !== "player" || placedTiles.length > 0
-                      }
-                      className={`flex-1 py-2 sm:py-3 rounded-lg font-semibold flex items-center justify-center gap-1 text-xs sm:text-sm ${
-                        currentPlayer !== "player" || placedTiles.length > 0
-                          ? darkMode
-                            ? "bg-gray-700 text-gray-500"
-                            : "bg-gray-300 text-gray-400"
-                          : multiSelectMode
-                            ? darkMode
-                              ? "bg-blue-600 hover:bg-blue-500 ring-2 ring-blue-400"
-                              : "bg-blue-500 hover:bg-blue-400 text-white ring-2 ring-blue-300"
-                            : darkMode
-                              ? "bg-purple-700 hover:bg-purple-600"
-                              : "bg-purple-500 hover:bg-purple-600 text-white"
-                      }`}
-                    >
-                      {multiSelectMode ? "Ungroup" : "Group"}
-                    </button>
 
-                    {/* Show Orientation button when in group mode, Shuffle when not */}
-                    {multiSelectMode ? (
-                      <button
-                        onClick={() =>
-                          setOrientation(
+                      {/* Show Orientation button when in group mode, Shuffle when not */}
+                      {multiSelectMode ? (
+                        <button
+                          onClick={() =>
+                            setOrientation(
+                              orientation === "horizontal"
+                                ? "vertical"
+                                : "horizontal",
+                            )
+                          }
+                          disabled={currentPlayer !== "player"}
+                          className={`flex-1 py-2 sm:py-3 rounded-lg font-semibold flex items-center justify-center gap-1 text-xs sm:text-sm ${
+                            currentPlayer !== "player"
+                              ? darkMode
+                                ? "bg-gray-700 text-gray-500"
+                                : "bg-gray-300 text-gray-400"
+                              : darkMode
+                                ? "bg-purple-700 hover:bg-purple-600"
+                                : "bg-purple-500 hover:bg-purple-600 text-white"
+                          }`}
+                          title={`Current: ${
                             orientation === "horizontal"
-                              ? "vertical"
-                              : "horizontal",
-                          )
-                        }
-                        disabled={currentPlayer !== "player"}
-                        className={`flex-1 py-2 sm:py-3 rounded-lg font-semibold flex items-center justify-center gap-1 text-xs sm:text-sm ${
-                          currentPlayer !== "player"
-                            ? darkMode
-                              ? "bg-gray-700 text-gray-500"
-                              : "bg-gray-300 text-gray-400"
-                            : darkMode
-                              ? "bg-purple-700 hover:bg-purple-600"
-                              : "bg-purple-500 hover:bg-purple-600 text-white"
-                        }`}
-                        title={`Current: ${
-                          orientation === "horizontal"
-                            ? "Horizontal →"
-                            : "Vertical ↓"
-                        }`}
-                      >
-                        {orientation === "horizontal" ? (
-                          <ArrowRight size={16} className="sm:w-4 sm:h-4" />
-                        ) : (
-                          <ArrowDown size={16} className="sm:w-4 sm:h-4" />
-                        )}
-                        {orientation === "horizontal"
-                          ? "Horizontal"
-                          : "Vertical"}
-                      </button>
-                    ) : (
+                              ? "Horizontal →"
+                              : "Vertical ↓"
+                          }`}
+                        >
+                          {orientation === "horizontal" ? (
+                            <ArrowRight size={16} className="sm:w-4 sm:h-4" />
+                          ) : (
+                            <ArrowDown size={16} className="sm:w-4 sm:h-4" />
+                          )}
+                          {orientation === "horizontal"
+                            ? "Horizontal"
+                            : "Vertical"}
+                        </button>
+                      ) : (
+                        <button
+                          onClick={randomizeTiles}
+                          disabled={
+                            currentPlayer !== "player" || placedTiles.length > 0
+                          }
+                          className={`flex-1 py-2 sm:py-3 rounded-lg font-semibold flex items-center justify-center gap-1 text-xs sm:text-sm ${
+                            currentPlayer !== "player" || placedTiles.length > 0
+                              ? darkMode
+                                ? "bg-gray-700 text-gray-500"
+                                : "bg-gray-300 text-gray-400"
+                              : darkMode
+                                ? "bg-indigo-700 hover:bg-indigo-600"
+                                : "bg-indigo-500 hover:bg-indigo-600 text-white"
+                          }`}
+                        >
+                          <Shuffle size={16} className="sm:w-4 sm:h-4" />
+                          Shuffle
+                        </button>
+                      )}
+
                       <button
-                        onClick={randomizeTiles}
+                        onClick={swapTiles}
                         disabled={
                           currentPlayer !== "player" || placedTiles.length > 0
                         }
@@ -4269,92 +4422,72 @@ const WordGame = () => {
                               ? "bg-gray-700 text-gray-500"
                               : "bg-gray-300 text-gray-400"
                             : darkMode
-                              ? "bg-indigo-700 hover:bg-indigo-600"
-                              : "bg-indigo-500 hover:bg-indigo-600 text-white"
+                              ? "bg-orange-700 hover:bg-orange-600"
+                              : "bg-orange-500 hover:bg-orange-600 text-white"
                         }`}
                       >
-                        <Shuffle size={16} className="sm:w-4 sm:h-4" />
-                        Shuffle
+                        <RefreshCw size={16} className="sm:w-4 sm:h-4" />
+                        Swap
                       </button>
-                    )}
 
-                    <button
-                      onClick={swapTiles}
-                      disabled={
-                        currentPlayer !== "player" || placedTiles.length > 0
-                      }
-                      className={`flex-1 py-2 sm:py-3 rounded-lg font-semibold flex items-center justify-center gap-1 text-xs sm:text-sm ${
-                        currentPlayer !== "player" || placedTiles.length > 0
-                          ? darkMode
-                            ? "bg-gray-700 text-gray-500"
-                            : "bg-gray-300 text-gray-400"
-                          : darkMode
-                            ? "bg-orange-700 hover:bg-orange-600"
-                            : "bg-orange-500 hover:bg-orange-600 text-white"
-                      }`}
-                    >
-                      <RefreshCw size={16} className="sm:w-4 sm:h-4" />
-                      Swap
-                    </button>
+                      <button
+                        onClick={pass}
+                        disabled={currentPlayer !== "player"}
+                        className={`flex-1 py-2 sm:py-3 rounded-lg font-semibold flex items-center justify-center gap-1 text-xs sm:text-sm ${
+                          currentPlayer !== "player"
+                            ? darkMode
+                              ? "bg-gray-700 text-gray-500"
+                              : "bg-gray-300 text-gray-400"
+                            : darkMode
+                              ? "bg-yellow-700 hover:bg-yellow-600"
+                              : "bg-yellow-500 hover:bg-yellow-600 text-white"
+                        }`}
+                      >
+                        <SkipForward size={16} className="sm:w-4 sm:h-4" />
+                        Pass
+                      </button>
+                    </>
+                  )}
+                </div>
 
+                {/* Bottom row: Recall and Submit (only shown when tiles are placed) */}
+                {placedTiles.length > 0 && (
+                  <div className="flex gap-2">
                     <button
-                      onClick={pass}
+                      onClick={recall}
                       disabled={currentPlayer !== "player"}
-                      className={`flex-1 py-2 sm:py-3 rounded-lg font-semibold flex items-center justify-center gap-1 text-xs sm:text-sm ${
+                      className={`flex-1 py-2 sm:py-3 rounded-lg font-semibold flex items-center justify-center gap-1 sm:gap-2 text-sm sm:text-base ${
                         currentPlayer !== "player"
                           ? darkMode
                             ? "bg-gray-700 text-gray-500"
                             : "bg-gray-300 text-gray-400"
                           : darkMode
-                            ? "bg-yellow-700 hover:bg-yellow-600"
-                            : "bg-yellow-500 hover:bg-yellow-600 text-white"
+                            ? "bg-red-700 hover:bg-red-600"
+                            : "bg-red-500 hover:bg-red-600 text-white"
                       }`}
                     >
-                      <SkipForward size={16} className="sm:w-4 sm:h-4" />
-                      Pass
+                      <X size={18} className="sm:w-5 sm:h-5" />
+                      Recall
                     </button>
-                  </>
+                    <button
+                      onClick={submitWord}
+                      disabled={currentPlayer !== "player"}
+                      className={`flex-1 py-2 sm:py-3 rounded-lg font-semibold flex items-center justify-center gap-1 sm:gap-2 text-sm sm:text-base ${
+                        currentPlayer !== "player"
+                          ? darkMode
+                            ? "bg-gray-700 text-gray-500"
+                            : "bg-gray-300 text-gray-400"
+                          : darkMode
+                            ? "bg-green-700 hover:bg-green-600"
+                            : "bg-green-500 hover:bg-green-600 text-white"
+                      }`}
+                    >
+                      <Check size={18} className="sm:w-5 sm:h-5" />
+                      Submit
+                    </button>
+                  </div>
                 )}
               </div>
-
-              {/* Bottom row: Recall and Submit (only shown when tiles are placed) */}
-              {placedTiles.length > 0 && (
-                <div className="flex gap-2">
-                  <button
-                    onClick={recall}
-                    disabled={currentPlayer !== "player"}
-                    className={`flex-1 py-2 sm:py-3 rounded-lg font-semibold flex items-center justify-center gap-1 sm:gap-2 text-sm sm:text-base ${
-                      currentPlayer !== "player"
-                        ? darkMode
-                          ? "bg-gray-700 text-gray-500"
-                          : "bg-gray-300 text-gray-400"
-                        : darkMode
-                          ? "bg-red-700 hover:bg-red-600"
-                          : "bg-red-500 hover:bg-red-600 text-white"
-                    }`}
-                  >
-                    <X size={18} className="sm:w-5 sm:h-5" />
-                    Recall
-                  </button>
-                  <button
-                    onClick={submitWord}
-                    disabled={currentPlayer !== "player"}
-                    className={`flex-1 py-2 sm:py-3 rounded-lg font-semibold flex items-center justify-center gap-1 sm:gap-2 text-sm sm:text-base ${
-                      currentPlayer !== "player"
-                        ? darkMode
-                          ? "bg-gray-700 text-gray-500"
-                          : "bg-gray-300 text-gray-400"
-                        : darkMode
-                          ? "bg-green-700 hover:bg-green-600"
-                          : "bg-green-500 hover:bg-green-600 text-white"
-                    }`}
-                  >
-                    <Check size={18} className="sm:w-5 sm:h-5" />
-                    Submit
-                  </button>
-                </div>
-              )}
-            </div>
             )}
           </div>
 
@@ -4383,10 +4516,10 @@ const WordGame = () => {
                       const isPlacedTile = placedTiles.some(
                         (t) => t.row === rowIndex && t.col === colIndex,
                       );
-                      // Check if this tile is being recalled (spinning animation)
-                      const isRecalling =
-                        recallingTile?.row === rowIndex &&
-                        recallingTile?.col === colIndex;
+                      // Check if this tile is being recalled (flying animation)
+                      const isRecalling = recallingTiles.some(
+                        (t) => t.row === rowIndex && t.col === colIndex,
+                      );
 
                       // Generate random animation parameters for each tile
                       const animationDelay =
@@ -4472,10 +4605,7 @@ const WordGame = () => {
                                 )
                               }
                               onTouchStart={(e) => {
-                                if (
-                                  !showCelebration &&
-                                  isPlacedTile
-                                ) {
+                                if (!showCelebration && isPlacedTile) {
                                   handleTouchStart(
                                     e,
                                     cell.letter,
@@ -4500,14 +4630,16 @@ const WordGame = () => {
                                   handleTileDoubleTap(rowIndex, colIndex);
                                 }
                               }}
-                              className={`flex flex-col items-center justify-center leading-none touch-none ${
-                                !showCelebration && !isRecalling ? "cursor-move" : ""
+                              className={`flex items-center justify-center leading-none touch-none relative w-full h-full ${
+                                !showCelebration && !isRecalling
+                                  ? "cursor-move"
+                                  : ""
                               } ${isRecalling ? "tile-recall" : ""}`}
                             >
-                              <div className="text-xs sm:text-sm md:text-base lg:text-sm xl:text-lg font-bold leading-none">
+                              <div className="text-sm sm:text-base md:text-lg lg:text-base xl:text-xl font-bold leading-none">
                                 {cell.letter}
                               </div>
-                              <div className="text-[0.2rem] sm:text-[0.25rem] md:text-[0.35rem] lg:text-[0.25rem] xl:text-[0.35rem]">
+                              <div className="absolute bottom-0 right-0.5 text-[0.25rem] sm:text-[0.3rem] md:text-[0.4rem] lg:text-[0.3rem] xl:text-[0.4rem] opacity-80">
                                 {cell.score}
                               </div>
                             </div>
@@ -4755,27 +4887,54 @@ const WordGame = () => {
                 {touchMultiTiles.tiles.map((letter, i) => (
                   <div
                     key={i}
-                    className={`w-12 h-12 flex flex-col items-center justify-center rounded-lg font-bold ${tileBg} text-white shadow-lg`}
+                    className={`w-12 h-12 flex items-center justify-center rounded-lg font-bold ${tileBg} text-white shadow-lg relative`}
                   >
-                    <div className="text-xl leading-none">{letter}</div>
-                    <div className="text-[0.5rem]">{LETTER_SCORES[letter]}</div>
+                    <div className="text-2xl leading-none">{letter}</div>
+                    <div className="absolute bottom-0.5 right-1 text-[0.5rem] opacity-80">{LETTER_SCORES[letter]}</div>
                   </div>
                 ))}
               </div>
             ) : touchDragTile ? (
               <div
-                className={`w-12 h-12 flex flex-col items-center justify-center rounded-lg font-bold ${tileBg} text-white shadow-lg opacity-90`}
+                className={`w-12 h-12 flex items-center justify-center rounded-lg font-bold ${tileBg} text-white shadow-lg opacity-90 relative`}
               >
-                <div className="text-xl leading-none">
+                <div className="text-2xl leading-none">
                   {touchDragTile.letter}
                 </div>
-                <div className="text-[0.5rem]">
+                <div className="absolute bottom-0.5 right-1 text-[0.5rem] opacity-80">
                   {LETTER_SCORES[touchDragTile.letter]}
                 </div>
               </div>
             ) : null}
           </div>
         )}
+
+        {/* Flying tile animations for recall */}
+        {flyingTiles.map((tile) => (
+          // eslint-disable-next-line react/forbid-dom-props
+          <div
+            key={tile.id}
+            className={`flying-tile ${tileBg} shadow-lg`}
+            style={
+              {
+                left: `${tile.startX}px`,
+                top: `${tile.startY}px`,
+                marginLeft: `-${tile.startSize / 2}px`,
+                marginTop: `-${tile.startSize / 2}px`,
+                "--start-size": `${tile.startSize}px`,
+                "--end-size": `${tile.endSize}px`,
+                "--travel-x": `${tile.endX - tile.startX}px`,
+                "--travel-y": `${tile.endY - tile.startY}px`,
+                animationDelay: `${tile.delay}ms`,
+              } as React.CSSProperties
+            }
+          >
+            <div className="text-xl sm:text-2xl leading-none">{tile.letter}</div>
+            <div className="absolute bottom-0.5 right-1 text-[0.4rem] sm:text-[0.5rem] opacity-80">
+              {LETTER_SCORES[tile.letter]}
+            </div>
+          </div>
+        ))}
       </div>
     </div>
   );

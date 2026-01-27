@@ -68,23 +68,40 @@ html, body {
   top: var(--drag-y);
 }
 
-/* Tile recall animation - spins and shrinks as if being thrown back */
-@keyframes tileRecall {
+/* Tile recall animation - hides the original tile */
+.tile-recall {
+  opacity: 0;
+  pointer-events: none;
+}
+
+/* Flying tile animation - travels from board to rack while spinning */
+@keyframes tileFlying {
   0% {
-    transform: rotate(0deg) scale(1);
-    opacity: 1;
+    transform: translate(0, 0) rotate(0deg);
+    width: var(--start-size);
+    height: var(--start-size);
   }
   50% {
-    transform: rotate(360deg) scale(1.2);
-    opacity: 0.8;
+    transform: translate(calc(var(--travel-x) * 0.5), calc(var(--travel-y) * 0.5 - 30px)) rotate(360deg);
+    width: calc((var(--start-size) + var(--end-size)) / 2);
+    height: calc((var(--start-size) + var(--end-size)) / 2);
   }
   100% {
-    transform: rotate(720deg) scale(0);
-    opacity: 0;
+    transform: translate(var(--travel-x), var(--travel-y)) rotate(720deg);
+    width: var(--end-size);
+    height: var(--end-size);
   }
 }
 
-.tile-recall {
-  animation: tileRecall 0.3s ease-in forwards;
+.flying-tile {
+  position: fixed;
   pointer-events: none;
+  z-index: 200;
+  animation: tileFlying 0.4s ease-in-out forwards;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 0.5rem;
+  font-weight: bold;
+  color: white;
 }
