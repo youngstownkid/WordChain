@@ -4194,12 +4194,12 @@ const WordGame = () => {
                                 setDragOffset(positionInGroup);
                               }
                             }}
-                            className={`w-8 h-8 sm:w-10 sm:h-10 md:w-12 md:h-12 lg:w-9 lg:h-9 xl:w-11 xl:h-11 flex items-center justify-center rounded font-bold cursor-pointer ${tileBg} text-white transition-all hover:opacity-80 relative`}
+                            className={`w-8 h-8 sm:w-10 sm:h-10 md:w-12 md:h-12 lg:w-9 lg:h-9 xl:w-11 xl:h-11 flex flex-col items-center justify-center rounded font-bold cursor-pointer ${tileBg} text-white transition-all hover:opacity-80`}
                           >
-                            <div className="text-xl sm:text-3xl md:text-4xl lg:text-3xl xl:text-4xl leading-none">
+                            <div className="text-sm sm:text-lg md:text-xl lg:text-lg xl:text-2xl leading-none">
                               {playerRack[tileIndex]}
                             </div>
-                            <div className="absolute bottom-0.5 right-0.5 text-[0.35rem] sm:text-[0.45rem] md:text-[0.5rem] lg:text-[0.45rem] xl:text-[0.5rem] opacity-80">
+                            <div className="text-[0.4rem] sm:text-[0.5rem] md:text-[0.55rem] lg:text-[0.5rem] xl:text-[0.55rem]">
                               {LETTER_SCORES[playerRack[tileIndex]]}
                             </div>
                           </div>
@@ -4241,7 +4241,7 @@ const WordGame = () => {
                       }}
                       onTouchMove={handleTouchMove}
                       onTouchEnd={handleTouchEnd}
-                      className={`w-10 h-10 sm:w-12 sm:h-12 flex items-center justify-center rounded-lg font-bold touch-none relative ${
+                      className={`w-10 h-10 sm:w-12 sm:h-12 flex flex-col items-center justify-center rounded-lg font-bold touch-none ${
                         multiSelectMode || isSwapMode
                           ? "cursor-pointer"
                           : "cursor-move"
@@ -4257,10 +4257,10 @@ const WordGame = () => {
                           : ""
                       }`}
                     >
-                      <div className="text-3xl sm:text-5xl leading-none">
+                      <div className="text-xl sm:text-3xl leading-none">
                         {letter}
                       </div>
-                      <div className="absolute bottom-0.5 right-1 text-[0.5rem] sm:text-[0.6rem] opacity-80">
+                      <div className="text-[0.55rem] sm:text-[0.7rem]">
                         {LETTER_SCORES[letter]}
                       </div>
                     </div>
@@ -4695,7 +4695,7 @@ const WordGame = () => {
                               <div className="text-base sm:text-lg md:text-xl lg:text-lg xl:text-2xl font-bold leading-none">
                                 {cell.letter}
                               </div>
-                              <div className="absolute bottom-0 right-0.5 text-[0.25rem] sm:text-[0.3rem] md:text-[0.4rem] lg:text-[0.3rem] xl:text-[0.4rem] opacity-80">
+                              <div className="absolute bottom-0 right-0.5 text-[0.35rem] sm:text-[0.4rem] md:text-[0.5rem] lg:text-[0.4rem] xl:text-[0.5rem] opacity-80">
                                 {cell.score}
                               </div>
                             </div>
@@ -4947,21 +4947,21 @@ const WordGame = () => {
                 {touchMultiTiles.tiles.map((letter, i) => (
                   <div
                     key={i}
-                    className={`w-12 h-12 flex items-center justify-center rounded-lg font-bold ${tileBg} text-white shadow-lg relative`}
+                    className={`w-12 h-12 flex flex-col items-center justify-center rounded-lg font-bold ${tileBg} text-white shadow-lg`}
                   >
-                    <div className="text-3xl leading-none">{letter}</div>
-                    <div className="absolute bottom-0.5 right-1 text-[0.5rem] opacity-80">{LETTER_SCORES[letter]}</div>
+                    <div className="text-xl leading-none">{letter}</div>
+                    <div className="text-[0.5rem]">{LETTER_SCORES[letter]}</div>
                   </div>
                 ))}
               </div>
             ) : touchDragTile ? (
               <div
-                className={`w-12 h-12 flex items-center justify-center rounded-lg font-bold ${tileBg} text-white shadow-lg opacity-90 relative`}
+                className={`w-12 h-12 flex flex-col items-center justify-center rounded-lg font-bold ${tileBg} text-white shadow-lg opacity-90`}
               >
-                <div className="text-3xl leading-none">
+                <div className="text-xl leading-none">
                   {touchDragTile.letter}
                 </div>
-                <div className="absolute bottom-0.5 right-1 text-[0.5rem] opacity-80">
+                <div className="text-[0.5rem]">
                   {LETTER_SCORES[touchDragTile.letter]}
                 </div>
               </div>
@@ -4989,8 +4989,8 @@ const WordGame = () => {
               } as React.CSSProperties
             }
           >
-            <div className="text-2xl sm:text-3xl leading-none">{tile.letter}</div>
-            <div className="absolute bottom-0.5 right-1 text-[0.4rem] sm:text-[0.5rem] opacity-80">
+            <div className="text-lg sm:text-xl leading-none">{tile.letter}</div>
+            <div className="text-[0.4rem] sm:text-[0.5rem]">
               {LETTER_SCORES[tile.letter]}
             </div>
           </div>
