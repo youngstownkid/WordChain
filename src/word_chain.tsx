@@ -411,34 +411,26 @@ const createWelcomeBoard = (): (BoardTile | null)[][] => {
     .map(() => Array(BOARD_SIZE).fill(null));
 
   // Spell "WORD" horizontally in the middle
-  const word = "WORD";
-  const startRow = 7;
-  const startCol = 3;
-
-  for (let i = 0; i < word.length; i++) {
-    const letter = word[i] as Letter;
-    emptyBoard[startRow][startCol + i] = {
-      letter: letter,
-      score: LETTER_SCORES[letter],
-    };
-  }
-
-  // Spell "CHAIN" horizontally in the middle
-  const word2 = "CHAIN";
-  const startRow2 = 7;
-  const startCol2 = 8;
-
-  for (let i = 0; i < word2.length; i++) {
-    const letter2 = word[i] as Letter;
-    emptyBoard[startRow2][startCol2 + i] = {
-      letter: letter2,
-      score: LETTER_SCORES[letter2],
-    };
-  }
+  writeWord(emptyBoard, "WORD", 7, 3);
+  writeWord(emptyBoard, "CHAIN", 7, 8);
 
   return emptyBoard;
 };
 
+function writeWord(
+  emptyBoard: any[][],
+  word: string,
+  row: number,
+  col: number,
+) {
+  for (let i = 0; i < word.length; i++) {
+    const letter = word[i] as Letter;
+    emptyBoard[row][col + i] = {
+      letter: letter,
+      score: LETTER_SCORES[letter],
+    };
+  }
+}
 const WordGame = () => {
   const [darkMode, setDarkMode] = useState<boolean>(true);
   const [board, setBoard] =
