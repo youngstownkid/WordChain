@@ -86,7 +86,6 @@ type SquareType = "normal" | "DL" | "TL" | "DW" | "TW" | "center";
 type GameMode = "normal" | "group" | "swap" | "forceSwapPass";
 
 type ComboBonusType =
-  | "multiplier"
   | "increment10"
   | "increment25"
   | "increment50"
@@ -508,35 +507,11 @@ const WordGame = () => {
   const [playerComboStreak, setPlayerComboStreak] = useState<number>(0); // Player's combo streak (0 = no combo, 2+ = active)
   const [opponentComboStreak, setOpponentComboStreak] = useState<number>(0); // Opponent's combo streak (0 = no combo, 2+ = active)
   const [comboBonusType, setComboBonusType] =
-    useState<ComboBonusType>("increment25"); // "multiplier" = 2x, 3x, 4x; "increment10/25/50/100" = +10%/25%/50%/100% per combo
-
-  // Helper to get increment step from bonus type
-  const getIncrementStep = (bonusType: ComboBonusType): number => {
-    switch (bonusType) {
-      case "multiplier":
-      case "increment100":
-        return 100;
-      case "increment50":
-        return 50;
-      case "increment25":
-        return 25;
-      case "increment10":
-        return 10;
-      default:
-        return 25;
-    }
-  };
+    useState<ComboBonusType>("increment25"); // "increment10/25/50/100" = +10%/25%/50%/100% per combo
 
   // Helper to format combo display for a given streak
-  const formatComboDisplay = (
-    streak: number,
-    bonusType: ComboBonusType = comboBonusType,
-  ): string => {
-    if (bonusType === "multiplier" || bonusType === "increment100") {
-      return `${streak}x`;
-    }
-    const step = getIncrementStep(bonusType);
-    return `+${(streak - 1) * step}%`;
+  const formatComboDisplay = (streak: number): string => {
+    return `${streak}x`;
   };
 
   // Touch drag state
@@ -744,7 +719,7 @@ const WordGame = () => {
         let bonus = "";
         if (scoring.isCombo) {
           bonus =
-            comboBonusType === "multiplier" || comboBonusType === "increment100"
+            comboBonusType === "increment100"
               ? ` x${scoring.comboMultiplier}`
               : ` +${scoring.comboPercentage}%`;
         }
@@ -754,7 +729,12 @@ const WordGame = () => {
           runOut = "+50";
         }
 
-        let previewMessage = `${wordsText} scores ${scoring.baseScore}${bonus}${runOut} = ${scoring.finalScore}pts`;
+        let previewMessage = `${wordsText} scores ${scoring.baseScore}${bonus}${runOut}`;
+        if (bonus !== "" || runOut !== "") {
+          previewMessage += `${bonus}${runOut} = ${scoring.finalScore}pts`;
+        } else {
+          previewMessage += `pts`;
+        }
         setMessage(previewMessage);
       }
     };
@@ -2269,7 +2249,7 @@ const WordGame = () => {
           ? 1 + comboWordCount
           : currentComboStreak + comboWordCount;
 
-      if (bonusType === "multiplier" || bonusType === "increment100") {
+      if (bonusType === "increment100") {
         // Multiplier mode: 2x, 3x, 4x, etc. (increment100 is effectively the same)
         comboMultiplier = newComboStreak;
         comboPercentage = (newComboStreak - 1) * 100; // For display: 100%, 200%, etc.
@@ -3328,7 +3308,7 @@ const WordGame = () => {
       let bonus = "";
       if (scoring.isCombo) {
         bonus =
-          comboBonusType === "multiplier" || comboBonusType === "increment100"
+          comboBonusType === "increment100"
             ? ` x${scoring.comboMultiplier}`
             : ` +${scoring.comboPercentage}%`;
       }
@@ -3338,7 +3318,12 @@ const WordGame = () => {
         runOut = "+50";
       }
 
-      let opponentMessage = `Opponent scored ${scoring.baseScore}${bonus}${runOut} = ${scoring.finalScore}pts`;
+      let opponentMessage = `Opponent scored ${scoring.baseScore}`;
+      if (bonus !== "" || runOut !== "") {
+        opponentMessage += `${bonus}${runOut} = ${scoring.finalScore}pts`;
+      } else {
+        opponentMessage += `pts`;
+      }
 
       setMessage(opponentMessage);
     }, 1500);
@@ -3389,7 +3374,7 @@ const WordGame = () => {
 
     if (scoring.isCombo) {
       const comboDisplay =
-        comboBonusType === "multiplier" || comboBonusType === "increment100"
+        comboBonusType === "increment100"
           ? `${scoring.comboMultiplier}x`
           : `+${scoring.comboPercentage}%`;
       scoreMessage += ` 🔥 ${comboDisplay} COMBO!`;
