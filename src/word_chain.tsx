@@ -497,7 +497,8 @@ const WordGame = () => {
   const [statsExpanded, setStatsExpanded] = useState<boolean>(false); // Details section collapsed by default
   const [playerComboStreak, setPlayerComboStreak] = useState<number>(0); // Player's combo streak (0 = no combo, 2+ = active)
   const [opponentComboStreak, setOpponentComboStreak] = useState<number>(0); // Opponent's combo streak (0 = no combo, 2+ = active)
-  const [comboBonusType, setComboBonusType] = useState<ComboBonusType>("multiplier"); // "multiplier" = 2x, 3x, 4x; "increment" = +10%, +20%, +30%
+  const [comboBonusType, setComboBonusType] =
+    useState<ComboBonusType>("multiplier"); // "multiplier" = 2x, 3x, 4x; "increment" = +10%, +20%, +30%
 
   // Touch drag state
   const [touchDragTile, setTouchDragTile] = useState<{
@@ -704,9 +705,10 @@ const WordGame = () => {
         let previewMessage = `Preview: ${scoring.finalScore} points (${wordsText})`;
 
         if (scoring.isCombo) {
-          const comboDisplay = comboBonusType === "multiplier"
-            ? `${scoring.comboMultiplier}x`
-            : `+${scoring.comboPercentage}%`;
+          const comboDisplay =
+            comboBonusType === "multiplier"
+              ? `${scoring.comboMultiplier}x`
+              : `+${scoring.comboPercentage}%`;
           previewMessage += ` 🔥 ${comboDisplay} COMBO!`;
         }
 
@@ -2236,7 +2238,9 @@ const WordGame = () => {
         // Increment mode: +10%, +20%, +30%, etc. (streak - 1 because streak 2 = first combo = 10%)
         comboPercentage = (newComboStreak - 1) * 10;
         comboMultiplier = newComboStreak; // Keep for display purposes
-        finalScore = Math.round(adjustedBaseScore * (1 + comboPercentage / 100));
+        finalScore = Math.round(
+          adjustedBaseScore * (1 + comboPercentage / 100),
+        );
       }
     }
 
@@ -3279,9 +3283,10 @@ const WordGame = () => {
         score: scoring.finalScore.toString(),
       });
       if (scoring.isCombo) {
-        const comboDisplay = comboBonusType === "multiplier"
-          ? `${scoring.comboMultiplier}x`
-          : `+${scoring.comboPercentage}%`;
+        const comboDisplay =
+          comboBonusType === "multiplier"
+            ? `${scoring.comboMultiplier}x`
+            : `+${scoring.comboPercentage}%`;
         opponentMessage += ` 🔥 ${comboDisplay} COMBO!`;
       }
       if (scoring.isRunOut) {
@@ -3335,9 +3340,10 @@ const WordGame = () => {
     });
 
     if (scoring.isCombo) {
-      const comboDisplay = comboBonusType === "multiplier"
-        ? `${scoring.comboMultiplier}x`
-        : `+${scoring.comboPercentage}%`;
+      const comboDisplay =
+        comboBonusType === "multiplier"
+          ? `${scoring.comboMultiplier}x`
+          : `+${scoring.comboPercentage}%`;
       scoreMessage += ` 🔥 ${comboDisplay} COMBO!`;
     }
 
@@ -3828,13 +3834,27 @@ const WordGame = () => {
                     {/* Player Combo Streak */}
                     {playerComboStreak >= 2 && (
                       <span className="text-orange-500 font-bold text-sm animate-pulse">
-                        🔥{comboBonusType === "multiplier" ? `${playerComboStreak}x` : `+${(playerComboStreak - 1) * 10}%`}
+                        🔥
+                        {comboBonusType === "multiplier"
+                          ? `${playerComboStreak}x`
+                          : `+${(playerComboStreak - 1) * 10}%`}
                       </span>
                     )}
                   </div>
                 </div>
-                <div className="flex-1 text-center text-gray-500 text-sm">
-                  vs
+                <div className="flex-1 text-center">
+                  {timerDuration > 0 && gameStarted && !gameEnded ? (
+                    <div
+                      className={`text-lg sm:text-xl font-bold ${
+                        timeRemaining <= 10 ? "text-red-500" : "text-gray-500"
+                      }`}
+                    >
+                      {Math.floor(timeRemaining / 60)}:
+                      {(timeRemaining % 60).toString().padStart(2, "0")}
+                    </div>
+                  ) : (
+                    <span className="text-gray-500 text-sm">vs</span>
+                  )}
                 </div>
                 <div className="flex-1 text-right">
                   <div className="text-xs sm:text-sm text-gray-400">
@@ -3844,7 +3864,10 @@ const WordGame = () => {
                     {/* Opponent Combo Streak */}
                     {opponentComboStreak >= 2 && (
                       <span className="text-orange-500 font-bold text-sm animate-pulse">
-                        🔥{comboBonusType === "multiplier" ? `${opponentComboStreak}x` : `+${(opponentComboStreak - 1) * 10}%`}
+                        🔥
+                        {comboBonusType === "multiplier"
+                          ? `${opponentComboStreak}x`
+                          : `+${(opponentComboStreak - 1) * 10}%`}
                       </span>
                     )}
                     <span className="text-xl sm:text-2xl font-bold">
@@ -3889,7 +3912,7 @@ const WordGame = () => {
 
                 {statsExpanded && (
                   <div className="pt-2 space-y-3">
-                    {/* Game Options */}
+                    {/* Game Options - All three on one row */}
                     <div className="flex gap-2">
                       <div className="flex-1">
                         <label className="block text-xs sm:text-sm mb-1 text-gray-400">
@@ -3906,7 +3929,7 @@ const WordGame = () => {
                                 | "expert",
                             )
                           }
-                          className={`w-full p-2 rounded text-xs sm:text-sm ${
+                          className={`w-full p-1.5 sm:p-2 rounded text-[0.65rem] sm:text-xs ${
                             darkMode ? "bg-gray-700" : "bg-gray-200"
                           }`}
                           disabled={gameStarted}
@@ -3920,53 +3943,48 @@ const WordGame = () => {
                       </div>
                       <div className="flex-1">
                         <label className="block text-xs sm:text-sm mb-1 text-gray-400">
-                          Turn Timer
+                          Timer
                         </label>
                         <select
                           value={timerDuration}
                           onChange={(e) =>
                             setTimerDuration(Number(e.target.value))
                           }
-                          className={`w-full p-2 rounded text-xs sm:text-sm ${
+                          className={`w-full p-1.5 sm:p-2 rounded text-[0.65rem] sm:text-xs ${
                             darkMode ? "bg-gray-700" : "bg-gray-200"
                           }`}
                           disabled={gameStarted}
                           title="Select turn timer duration"
                         >
                           <option value={0}>None</option>
-                          <option value={30}>30 Sec</option>
-                          <option value={45}>45 Sec</option>
-                          <option value={60}>1 Min</option>
-                          <option value={90}>1.5 Min</option>
-                          <option value={120}>2 Min</option>
-                          <option value={180}>3 Min</option>
-                          <option value={240}>4 Min</option>
-                          <option value={300}>5 Min</option>
+                          <option value={30}>30s</option>
+                          <option value={45}>45s</option>
+                          <option value={60}>1m</option>
+                          <option value={90}>1.5m</option>
+                          <option value={120}>2m</option>
+                          <option value={180}>3m</option>
+                          <option value={240}>4m</option>
+                          <option value={300}>5m</option>
                         </select>
                       </div>
-                    </div>
-                    <div className="flex gap-2">
                       <div className="flex-1">
                         <label className="block text-xs sm:text-sm mb-1 text-gray-400">
-                          Combo Bonus
+                          Combo
                         </label>
                         <select
                           value={comboBonusType}
                           onChange={(e) =>
                             setComboBonusType(e.target.value as ComboBonusType)
                           }
-                          className={`w-full p-2 rounded text-xs sm:text-sm ${
+                          className={`w-full p-1.5 sm:p-2 rounded text-[0.65rem] sm:text-xs ${
                             darkMode ? "bg-gray-700" : "bg-gray-200"
                           }`}
                           disabled={gameStarted}
                           title="Select combo bonus type"
                         >
-                          <option value="multiplier">Multiplier (2x, 3x...)</option>
-                          <option value="increment">Increment (+10%, +20%...)</option>
+                          <option value="multiplier">Multiplier</option>
+                          <option value="increment">+10%</option>
                         </select>
-                      </div>
-                      <div className="flex-1">
-                        {/* Empty placeholder to maintain layout */}
                       </div>
                     </div>
 
@@ -4044,32 +4062,6 @@ const WordGame = () => {
                 )}
               </div>
 
-              {/* Time Remaining */}
-              {timerDuration > 0 &&
-                gameStarted &&
-                currentPlayer === "player" &&
-                !gameEnded && (
-                  <div
-                    className={`mt-3 p-2 rounded flex items-center justify-center ${
-                      timeRemaining <= 10
-                        ? darkMode
-                          ? "bg-red-900"
-                          : "bg-red-200"
-                        : darkMode
-                          ? "bg-gray-700"
-                          : "bg-gray-300"
-                    }`}
-                  >
-                    <div
-                      className={`text-sm sm:text-base font-bold ${
-                        timeRemaining <= 10 ? "text-red-500" : ""
-                      }`}
-                    >
-                      Time: {Math.floor(timeRemaining / 60)}:
-                      {(timeRemaining % 60).toString().padStart(2, "0")}
-                    </div>
-                  </div>
-                )}
             </div>
 
             {/* Tile Rack */}
