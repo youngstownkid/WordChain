@@ -13055,6 +13055,7 @@ swives
 swivet
 swoons
 swoops
+swoopy
 swoosh
 swords
 swound
