@@ -85,6 +85,8 @@ type SquareType = "normal" | "DL" | "TL" | "DW" | "TW" | "center";
 
 type GameMode = "normal" | "group" | "swap" | "forceSwapPass";
 
+type ComboBonusType = "multiplier" | "increment";
+
 const LETTER_SCORES: Record<Letter, number> = {
   A: 1,
   B: 3,
@@ -495,6 +497,7 @@ const WordGame = () => {
   const [statsExpanded, setStatsExpanded] = useState<boolean>(false); // Details section collapsed by default
   const [playerComboStreak, setPlayerComboStreak] = useState<number>(0); // Player's combo streak (0 = no combo, 2+ = active)
   const [opponentComboStreak, setOpponentComboStreak] = useState<number>(0); // Opponent's combo streak (0 = no combo, 2+ = active)
+  const [comboBonusType, setComboBonusType] = useState<ComboBonusType>("multiplier"); // "multiplier" = 2x, 3x, 4x; "increment" = +10%, +20%, +30%
 
   // Touch drag state
   const [touchDragTile, setTouchDragTile] = useState<{
@@ -577,6 +580,7 @@ const WordGame = () => {
         setMultiSelectMode(state.multiSelectMode || false);
         setIsSwapMode(state.isSwapMode || false);
         setGameMode(state.gameMode || "normal");
+        setComboBonusType(state.comboBonusType || "multiplier");
 
         // Restore combo state
         setPlayerComboStreak(state.playerComboStreak || 0);
@@ -700,7 +704,10 @@ const WordGame = () => {
         let previewMessage = `Preview: ${scoring.finalScore} points (${wordsText})`;
 
         if (scoring.isCombo) {
-          previewMessage += ` 🔥 ${scoring.comboMultiplier}x COMBO!`;
+          const comboDisplay = comboBonusType === "multiplier"
+            ? `${scoring.comboMultiplier}x`
+            : `+${scoring.comboPercentage}%`;
+          previewMessage += ` 🔥 ${comboDisplay} COMBO!`;
         }
 
         if (scoring.isRunOut) {
@@ -739,6 +746,7 @@ const WordGame = () => {
         multiSelectMode,
         isSwapMode,
         gameMode,
+        comboBonusType,
         // Combo state
         playerComboStreak,
         opponentComboStreak,
@@ -769,6 +777,7 @@ const WordGame = () => {
     multiSelectMode,
     isSwapMode,
     gameMode,
+    comboBonusType,
     playerComboStreak,
     opponentComboStreak,
     lastPlayedTiles,
@@ -2163,6 +2172,7 @@ const WordGame = () => {
     isCombo: boolean;
     comboWordCount: number;
     comboMultiplier: number;
+    comboPercentage: number; // For increment mode: 10, 20, 30, etc.
     newComboStreak: number;
     allWordPositions: Array<{ row: number; col: number }>;
   }
@@ -2173,6 +2183,7 @@ const WordGame = () => {
     tiles: PlacedTile[],
     currentComboTiles: PlacedTile[],
     currentComboStreak: number,
+    bonusType: ComboBonusType = comboBonusType,
   ): ScoringResult => {
     const baseScore = calculateScore(tiles, currentBoard);
     const isRunOut = tiles.length === 7;
@@ -2204,9 +2215,10 @@ const WordGame = () => {
 
     const isCombo = comboWordCount > 0;
 
-    // Calculate combo multiplier - streak increases by number of chaining words
+    // Calculate combo bonus - streak increases by number of chaining words
     let newComboStreak = 0;
     let comboMultiplier = 1;
+    let comboPercentage = 0;
     let finalScore = adjustedBaseScore;
 
     if (isCombo) {
@@ -2215,8 +2227,17 @@ const WordGame = () => {
         currentComboStreak === 0
           ? 1 + comboWordCount
           : currentComboStreak + comboWordCount;
-      comboMultiplier = newComboStreak;
-      finalScore = adjustedBaseScore * comboMultiplier;
+
+      if (bonusType === "multiplier") {
+        // Multiplier mode: 2x, 3x, 4x, etc.
+        comboMultiplier = newComboStreak;
+        finalScore = adjustedBaseScore * comboMultiplier;
+      } else {
+        // Increment mode: +10%, +20%, +30%, etc. (streak - 1 because streak 2 = first combo = 10%)
+        comboPercentage = (newComboStreak - 1) * 10;
+        comboMultiplier = newComboStreak; // Keep for display purposes
+        finalScore = Math.round(adjustedBaseScore * (1 + comboPercentage / 100));
+      }
     }
 
     return {
@@ -2226,6 +2247,7 @@ const WordGame = () => {
       isCombo,
       comboWordCount,
       comboMultiplier,
+      comboPercentage,
       newComboStreak,
       allWordPositions,
     };
@@ -3257,7 +3279,10 @@ const WordGame = () => {
         score: scoring.finalScore.toString(),
       });
       if (scoring.isCombo) {
-        opponentMessage += ` 🔥 ${scoring.comboMultiplier}x COMBO!`;
+        const comboDisplay = comboBonusType === "multiplier"
+          ? `${scoring.comboMultiplier}x`
+          : `+${scoring.comboPercentage}%`;
+        opponentMessage += ` 🔥 ${comboDisplay} COMBO!`;
       }
       if (scoring.isRunOut) {
         opponentMessage += " 🎉 RUN OUT! (+50)";
@@ -3310,7 +3335,10 @@ const WordGame = () => {
     });
 
     if (scoring.isCombo) {
-      scoreMessage += ` 🔥 ${scoring.comboMultiplier}x COMBO!`;
+      const comboDisplay = comboBonusType === "multiplier"
+        ? `${scoring.comboMultiplier}x`
+        : `+${scoring.comboPercentage}%`;
+      scoreMessage += ` 🔥 ${comboDisplay} COMBO!`;
     }
 
     if (scoring.isRunOut) {
@@ -3800,7 +3828,7 @@ const WordGame = () => {
                     {/* Player Combo Streak */}
                     {playerComboStreak >= 2 && (
                       <span className="text-orange-500 font-bold text-sm animate-pulse">
-                        🔥{playerComboStreak}x
+                        🔥{comboBonusType === "multiplier" ? `${playerComboStreak}x` : `+${(playerComboStreak - 1) * 10}%`}
                       </span>
                     )}
                   </div>
@@ -3816,7 +3844,7 @@ const WordGame = () => {
                     {/* Opponent Combo Streak */}
                     {opponentComboStreak >= 2 && (
                       <span className="text-orange-500 font-bold text-sm animate-pulse">
-                        🔥{opponentComboStreak}x
+                        🔥{comboBonusType === "multiplier" ? `${opponentComboStreak}x` : `+${(opponentComboStreak - 1) * 10}%`}
                       </span>
                     )}
                     <span className="text-xl sm:text-2xl font-bold">
@@ -3917,6 +3945,30 @@ const WordGame = () => {
                         </select>
                       </div>
                     </div>
+                    <div className="flex gap-2">
+                      <div className="flex-1">
+                        <label className="block text-xs sm:text-sm mb-1 text-gray-400">
+                          Combo Bonus
+                        </label>
+                        <select
+                          value={comboBonusType}
+                          onChange={(e) =>
+                            setComboBonusType(e.target.value as ComboBonusType)
+                          }
+                          className={`w-full p-2 rounded text-xs sm:text-sm ${
+                            darkMode ? "bg-gray-700" : "bg-gray-200"
+                          }`}
+                          disabled={gameStarted}
+                          title="Select combo bonus type"
+                        >
+                          <option value="multiplier">Multiplier (2x, 3x...)</option>
+                          <option value="increment">Increment (+10%, +20%...)</option>
+                        </select>
+                      </div>
+                      <div className="flex-1">
+                        {/* Empty placeholder to maintain layout */}
+                      </div>
+                    </div>
 
                     {/* Stats - only show when game started */}
                     {gameStarted && (
@@ -3933,7 +3985,9 @@ const WordGame = () => {
                               </span>
                               <span className="font-semibold">
                                 {playerStats.highStreak > 0
-                                  ? `${playerStats.highStreak}x`
+                                  ? comboBonusType === "multiplier"
+                                    ? `${playerStats.highStreak}x`
+                                    : `+${(playerStats.highStreak - 1) * 10}%`
                                   : "-"}
                               </span>
                             </div>
@@ -3964,7 +4018,9 @@ const WordGame = () => {
                               </span>
                               <span className="font-semibold">
                                 {opponentStats.highStreak > 0
-                                  ? `${opponentStats.highStreak}x`
+                                  ? comboBonusType === "multiplier"
+                                    ? `${opponentStats.highStreak}x`
+                                    : `+${(opponentStats.highStreak - 1) * 10}%`
                                   : "-"}
                               </span>
                             </div>
@@ -4140,7 +4196,7 @@ const WordGame = () => {
                             }}
                             className={`w-8 h-8 sm:w-10 sm:h-10 md:w-12 md:h-12 lg:w-9 lg:h-9 xl:w-11 xl:h-11 flex items-center justify-center rounded font-bold cursor-pointer ${tileBg} text-white transition-all hover:opacity-80 relative`}
                           >
-                            <div className="text-lg sm:text-2xl md:text-3xl lg:text-2xl xl:text-3xl leading-none">
+                            <div className="text-xl sm:text-3xl md:text-4xl lg:text-3xl xl:text-4xl leading-none">
                               {playerRack[tileIndex]}
                             </div>
                             <div className="absolute bottom-0.5 right-0.5 text-[0.35rem] sm:text-[0.45rem] md:text-[0.5rem] lg:text-[0.45rem] xl:text-[0.5rem] opacity-80">
@@ -4201,7 +4257,7 @@ const WordGame = () => {
                           : ""
                       }`}
                     >
-                      <div className="text-2xl sm:text-4xl leading-none">
+                      <div className="text-3xl sm:text-5xl leading-none">
                         {letter}
                       </div>
                       <div className="absolute bottom-0.5 right-1 text-[0.5rem] sm:text-[0.6rem] opacity-80">
@@ -4636,7 +4692,7 @@ const WordGame = () => {
                                   : ""
                               } ${isRecalling ? "tile-recall" : ""}`}
                             >
-                              <div className="text-sm sm:text-base md:text-lg lg:text-base xl:text-xl font-bold leading-none">
+                              <div className="text-base sm:text-lg md:text-xl lg:text-lg xl:text-2xl font-bold leading-none">
                                 {cell.letter}
                               </div>
                               <div className="absolute bottom-0 right-0.5 text-[0.25rem] sm:text-[0.3rem] md:text-[0.4rem] lg:text-[0.3rem] xl:text-[0.4rem] opacity-80">
@@ -4792,7 +4848,9 @@ const WordGame = () => {
                   <div className="flex justify-between">
                     <span>Best Streak:</span>
                     <span className="font-semibold">
-                      {playerStats.highStreak}x
+                      {comboBonusType === "multiplier"
+                        ? `${playerStats.highStreak}x`
+                        : `+${(playerStats.highStreak - 1) * 10}%`}
                     </span>
                   </div>
                   <div className="flex justify-between">
@@ -4839,7 +4897,9 @@ const WordGame = () => {
                   <div className="flex justify-between">
                     <span>Best Streak:</span>
                     <span className="font-semibold">
-                      {careerStats.bestComboStreak}x
+                      {comboBonusType === "multiplier"
+                        ? `${careerStats.bestComboStreak}x`
+                        : `+${(careerStats.bestComboStreak - 1) * 10}%`}
                     </span>
                   </div>
                   <div className="flex justify-between">
@@ -4889,7 +4949,7 @@ const WordGame = () => {
                     key={i}
                     className={`w-12 h-12 flex items-center justify-center rounded-lg font-bold ${tileBg} text-white shadow-lg relative`}
                   >
-                    <div className="text-2xl leading-none">{letter}</div>
+                    <div className="text-3xl leading-none">{letter}</div>
                     <div className="absolute bottom-0.5 right-1 text-[0.5rem] opacity-80">{LETTER_SCORES[letter]}</div>
                   </div>
                 ))}
@@ -4898,7 +4958,7 @@ const WordGame = () => {
               <div
                 className={`w-12 h-12 flex items-center justify-center rounded-lg font-bold ${tileBg} text-white shadow-lg opacity-90 relative`}
               >
-                <div className="text-2xl leading-none">
+                <div className="text-3xl leading-none">
                   {touchDragTile.letter}
                 </div>
                 <div className="absolute bottom-0.5 right-1 text-[0.5rem] opacity-80">
@@ -4929,7 +4989,7 @@ const WordGame = () => {
               } as React.CSSProperties
             }
           >
-            <div className="text-xl sm:text-2xl leading-none">{tile.letter}</div>
+            <div className="text-2xl sm:text-3xl leading-none">{tile.letter}</div>
             <div className="absolute bottom-0.5 right-1 text-[0.4rem] sm:text-[0.5rem] opacity-80">
               {LETTER_SCORES[tile.letter]}
             </div>
