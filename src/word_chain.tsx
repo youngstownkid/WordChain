@@ -410,8 +410,8 @@ const createWelcomeBoard = (): (BoardTile | null)[][] => {
     .fill(null)
     .map(() => Array(BOARD_SIZE).fill(null));
 
-  // Spell "WORDCHAIN" horizontally in the middle
-  const word = "WORDCHAIN";
+  // Spell "WORD" horizontally in the middle
+  const word = "WORD";
   const startRow = 7;
   const startCol = 3;
 
@@ -420,6 +420,19 @@ const createWelcomeBoard = (): (BoardTile | null)[][] => {
     emptyBoard[startRow][startCol + i] = {
       letter: letter,
       score: LETTER_SCORES[letter],
+    };
+  }
+
+  // Spell "CHAIN" horizontally in the middle
+  const word2 = "CHAIN";
+  const startRow2 = 7;
+  const startCol2 = 8;
+
+  for (let i = 0; i < word2.length; i++) {
+    const letter2 = word[i] as Letter;
+    emptyBoard[startRow2][startCol2 + i] = {
+      letter: letter2,
+      score: LETTER_SCORES[letter2],
     };
   }
 
@@ -702,20 +715,20 @@ const WordGame = () => {
         );
         const wordsText = validation.words.join(", ");
 
-        let previewMessage = `Preview: ${scoring.finalScore} points (${wordsText})`;
-
+        let bonus = "";
         if (scoring.isCombo) {
-          const comboDisplay =
+          bonus =
             comboBonusType === "multiplier"
-              ? `${scoring.comboMultiplier}x`
-              : `+${scoring.comboPercentage}%`;
-          previewMessage += ` 🔥 ${comboDisplay} COMBO!`;
+              ? ` x${scoring.comboMultiplier}`
+              : ` +${scoring.comboPercentage}%`;
         }
 
+        let runOut = "";
         if (scoring.isRunOut) {
-          previewMessage += " 🎉 RUN OUT! (+50)";
+          runOut = "+50";
         }
 
+        let previewMessage = `${wordsText} -> ${scoring.baseScore}${bonus}${runOut} = ${scoring.finalScore}pts`;
         setMessage(previewMessage);
       }
     };
@@ -3279,19 +3292,21 @@ const WordGame = () => {
       }));
       setLastPlayedTiles(allOpponentTilesUsed);
 
-      let opponentMessage = getMessage("OpponentScoredFormat", {
-        score: scoring.finalScore.toString(),
-      });
+      let bonus = "";
       if (scoring.isCombo) {
-        const comboDisplay =
+        bonus =
           comboBonusType === "multiplier"
-            ? `${scoring.comboMultiplier}x`
-            : `+${scoring.comboPercentage}%`;
-        opponentMessage += ` 🔥 ${comboDisplay} COMBO!`;
+            ? ` x${scoring.comboMultiplier}`
+            : ` +${scoring.comboPercentage}%`;
       }
+
+      let runOut = "";
       if (scoring.isRunOut) {
-        opponentMessage += " 🎉 RUN OUT! (+50)";
+        runOut = "+50";
       }
+
+      let opponentMessage = `$Opponent scored ${scoring.baseScore}${bonus}${runOut} = ${scoring.finalScore}pts`;
+
       setMessage(opponentMessage);
     }, 1500);
   };
