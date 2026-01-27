@@ -4194,12 +4194,12 @@ const WordGame = () => {
                                 setDragOffset(positionInGroup);
                               }
                             }}
-                            className={`w-8 h-8 sm:w-10 sm:h-10 md:w-12 md:h-12 lg:w-9 lg:h-9 xl:w-11 xl:h-11 flex flex-col items-center justify-center rounded font-bold cursor-pointer ${tileBg} text-white transition-all hover:opacity-80`}
+                            className={`w-8 h-8 sm:w-10 sm:h-10 md:w-12 md:h-12 lg:w-9 lg:h-9 xl:w-11 xl:h-11 flex items-center justify-center rounded font-bold cursor-pointer ${tileBg} text-white transition-all hover:opacity-80 tile-font relative`}
                           >
-                            <div className="text-sm sm:text-lg md:text-xl lg:text-lg xl:text-2xl leading-none">
+                            <div className="text-base sm:text-xl md:text-2xl lg:text-xl xl:text-3xl leading-none">
                               {playerRack[tileIndex]}
                             </div>
-                            <div className="text-[0.4rem] sm:text-[0.5rem] md:text-[0.55rem] lg:text-[0.5rem] xl:text-[0.55rem]">
+                            <div className="absolute bottom-0.5 right-0.5 text-[0.4rem] sm:text-[0.5rem] md:text-[0.55rem] lg:text-[0.5rem] xl:text-[0.55rem] opacity-80">
                               {LETTER_SCORES[playerRack[tileIndex]]}
                             </div>
                           </div>
@@ -4241,7 +4241,7 @@ const WordGame = () => {
                       }}
                       onTouchMove={handleTouchMove}
                       onTouchEnd={handleTouchEnd}
-                      className={`w-10 h-10 sm:w-12 sm:h-12 flex flex-col items-center justify-center rounded-lg font-bold touch-none ${
+                      className={`w-10 h-10 sm:w-12 sm:h-12 flex items-center justify-center rounded-lg font-bold touch-none tile-font relative ${
                         multiSelectMode || isSwapMode
                           ? "cursor-pointer"
                           : "cursor-move"
@@ -4257,10 +4257,10 @@ const WordGame = () => {
                           : ""
                       }`}
                     >
-                      <div className="text-xl sm:text-3xl leading-none">
+                      <div className="text-2xl sm:text-4xl leading-none">
                         {letter}
                       </div>
-                      <div className="text-[0.55rem] sm:text-[0.7rem]">
+                      <div className="absolute bottom-0.5 right-1 text-[0.55rem] sm:text-[0.7rem] opacity-80">
                         {LETTER_SCORES[letter]}
                       </div>
                     </div>

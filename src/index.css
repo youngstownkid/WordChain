@@ -2,6 +2,13 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Eurostile font with fallbacks */
+@import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&display=swap');
+
+.tile-font {
+  font-family: 'Eurostile', 'Eurostile Extended', 'Orbitron', sans-serif;
+}
+
 * {
   margin: 0;
   padding: 0;
