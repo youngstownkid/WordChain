@@ -1,6 +1,6 @@
 {
   "name": "scrabble-game",
-  "version": "1.27.1017",
+  "version": "1.27.1035",
   "type": "module",
   "scripts": {
     "update-version": "node scripts/update-version.js",

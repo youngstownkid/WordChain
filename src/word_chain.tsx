@@ -85,7 +85,12 @@ type SquareType = "normal" | "DL" | "TL" | "DW" | "TW" | "center";
 
 type GameMode = "normal" | "group" | "swap" | "forceSwapPass";
 
-type ComboBonusType = "multiplier" | "increment10" | "increment25" | "increment50" | "increment100";
+type ComboBonusType =
+  | "multiplier"
+  | "increment10"
+  | "increment25"
+  | "increment50"
+  | "increment100";
 
 const LETTER_SCORES: Record<Letter, number> = {
   A: 1,
@@ -523,7 +528,10 @@ const WordGame = () => {
   };
 
   // Helper to format combo display for a given streak
-  const formatComboDisplay = (streak: number, bonusType: ComboBonusType = comboBonusType): string => {
+  const formatComboDisplay = (
+    streak: number,
+    bonusType: ComboBonusType = comboBonusType,
+  ): string => {
     if (bonusType === "multiplier" || bonusType === "increment100") {
       return `${streak}x`;
     }
@@ -746,7 +754,7 @@ const WordGame = () => {
           runOut = "+50";
         }
 
-        let previewMessage = `${wordsText} -> ${scoring.baseScore}${bonus}${runOut} = ${scoring.finalScore}pts`;
+        let previewMessage = `${wordsText} scores ${scoring.baseScore}${bonus}${runOut} = ${scoring.finalScore}pts`;
         setMessage(previewMessage);
       }
     };
@@ -2268,7 +2276,12 @@ const WordGame = () => {
         finalScore = adjustedBaseScore * comboMultiplier;
       } else {
         // Increment mode: +N%, +2N%, +3N%, etc. based on selected increment
-        const incrementStep = bonusType === "increment10" ? 10 : bonusType === "increment25" ? 25 : 50;
+        const incrementStep =
+          bonusType === "increment10"
+            ? 10
+            : bonusType === "increment25"
+              ? 25
+              : 50;
         comboPercentage = (newComboStreak - 1) * incrementStep;
         comboMultiplier = newComboStreak; // Keep for display purposes
         finalScore = Math.round(
@@ -3325,7 +3338,7 @@ const WordGame = () => {
         runOut = "+50";
       }
 
-      let opponentMessage = `$Opponent scored ${scoring.baseScore}${bonus}${runOut} = ${scoring.finalScore}pts`;
+      let opponentMessage = `Opponent scored ${scoring.baseScore}${bonus}${runOut} = ${scoring.finalScore}pts`;
 
       setMessage(opponentMessage);
     }, 1500);
