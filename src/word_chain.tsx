@@ -3774,10 +3774,42 @@ const WordGame = () => {
     <div className={`min-h-screen ${bgColor} ${textColor} p-2 sm:p-4`}>
       <div className="max-w-7xl mx-auto">
         <div className="flex justify-between items-center mb-2 sm:mb-4">
-          <h1 className="text-xl sm:text-2xl font-bold flex items-center gap-2">
-            <span className="text-2xl sm:text-3xl">🔥</span>
-            Word Chain
-            <span className="text-[0.5rem] sm:text-xs text-gray-500 font-normal self-end mb-0.5">
+          <h1 className="flex items-center gap-1">
+            {/* WORD tiles */}
+            {["W", "O", "R", "D"].map((letter) => (
+              <div
+                key={`word-${letter}`}
+                className={`w-6 h-6 sm:w-7 sm:h-7 md:w-9 md:h-9 lg:w-7 lg:h-7 xl:w-8 xl:h-8 flex items-center justify-center rounded font-bold ${
+                  darkMode ? "bg-emerald-700" : "bg-emerald-600"
+                } text-white relative tile-font`}
+              >
+                <div className="text-base sm:text-lg md:text-xl lg:text-lg xl:text-2xl leading-none">
+                  {letter}
+                </div>
+                <div className="absolute bottom-0 right-0.5 text-[0.25rem] sm:text-[0.3rem] md:text-[0.4rem] lg:text-[0.3rem] xl:text-[0.4rem] opacity-80">
+                  {LETTER_SCORES[letter as Letter]}
+                </div>
+              </div>
+            ))}
+            {/* Space between words */}
+            <div className="w-1 sm:w-2" />
+            {/* CHAIN tiles */}
+            {["C", "H", "A", "I", "N"].map((letter) => (
+              <div
+                key={`chain-${letter}`}
+                className={`w-6 h-6 sm:w-7 sm:h-7 md:w-9 md:h-9 lg:w-7 lg:h-7 xl:w-8 xl:h-8 flex items-center justify-center rounded font-bold ${
+                  darkMode ? "bg-emerald-700" : "bg-emerald-600"
+                } text-white relative tile-font`}
+              >
+                <div className="text-base sm:text-lg md:text-xl lg:text-lg xl:text-2xl leading-none">
+                  {letter}
+                </div>
+                <div className="absolute bottom-0 right-0.5 text-[0.25rem] sm:text-[0.3rem] md:text-[0.4rem] lg:text-[0.3rem] xl:text-[0.4rem] opacity-80">
+                  {LETTER_SCORES[letter as Letter]}
+                </div>
+              </div>
+            ))}
+            <span className="text-[0.5rem] sm:text-xs text-gray-500 font-normal self-end mb-0.5 ml-1">
               v{__APP_VERSION__}
             </span>
           </h1>
@@ -3969,7 +4001,7 @@ const WordGame = () => {
                       </div>
                       <div className="flex-1">
                         <label className="block text-xs sm:text-sm mb-1 text-gray-400">
-                          Combo
+                          Combo Bonus
                         </label>
                         <select
                           value={comboBonusType}
@@ -4061,7 +4093,6 @@ const WordGame = () => {
                   </div>
                 )}
               </div>
-
             </div>
 
             {/* Tile Rack */}
