@@ -85,7 +85,7 @@ type SquareType = "normal" | "DL" | "TL" | "DW" | "TW" | "center";
 
 type GameMode = "normal" | "group" | "swap" | "forceSwapPass";
 
-type ComboBonusType = "multiplier" | "increment";
+type ComboBonusType = "multiplier" | "increment10" | "increment25" | "increment50" | "increment100";
 
 const LETTER_SCORES: Record<Letter, number> = {
   A: 1,
@@ -503,7 +503,33 @@ const WordGame = () => {
   const [playerComboStreak, setPlayerComboStreak] = useState<number>(0); // Player's combo streak (0 = no combo, 2+ = active)
   const [opponentComboStreak, setOpponentComboStreak] = useState<number>(0); // Opponent's combo streak (0 = no combo, 2+ = active)
   const [comboBonusType, setComboBonusType] =
-    useState<ComboBonusType>("multiplier"); // "multiplier" = 2x, 3x, 4x; "increment" = +10%, +20%, +30%
+    useState<ComboBonusType>("increment25"); // "multiplier" = 2x, 3x, 4x; "increment10/25/50/100" = +10%/25%/50%/100% per combo
+
+  // Helper to get increment step from bonus type
+  const getIncrementStep = (bonusType: ComboBonusType): number => {
+    switch (bonusType) {
+      case "multiplier":
+      case "increment100":
+        return 100;
+      case "increment50":
+        return 50;
+      case "increment25":
+        return 25;
+      case "increment10":
+        return 10;
+      default:
+        return 25;
+    }
+  };
+
+  // Helper to format combo display for a given streak
+  const formatComboDisplay = (streak: number, bonusType: ComboBonusType = comboBonusType): string => {
+    if (bonusType === "multiplier" || bonusType === "increment100") {
+      return `${streak}x`;
+    }
+    const step = getIncrementStep(bonusType);
+    return `+${(streak - 1) * step}%`;
+  };
 
   // Touch drag state
   const [touchDragTile, setTouchDragTile] = useState<{
@@ -586,7 +612,7 @@ const WordGame = () => {
         setMultiSelectMode(state.multiSelectMode || false);
         setIsSwapMode(state.isSwapMode || false);
         setGameMode(state.gameMode || "normal");
-        setComboBonusType(state.comboBonusType || "multiplier");
+        setComboBonusType(state.comboBonusType || "increment25");
 
         // Restore combo state
         setPlayerComboStreak(state.playerComboStreak || 0);
@@ -710,7 +736,7 @@ const WordGame = () => {
         let bonus = "";
         if (scoring.isCombo) {
           bonus =
-            comboBonusType === "multiplier"
+            comboBonusType === "multiplier" || comboBonusType === "increment100"
               ? ` x${scoring.comboMultiplier}`
               : ` +${scoring.comboPercentage}%`;
         }
@@ -2235,13 +2261,15 @@ const WordGame = () => {
           ? 1 + comboWordCount
           : currentComboStreak + comboWordCount;
 
-      if (bonusType === "multiplier") {
-        // Multiplier mode: 2x, 3x, 4x, etc.
+      if (bonusType === "multiplier" || bonusType === "increment100") {
+        // Multiplier mode: 2x, 3x, 4x, etc. (increment100 is effectively the same)
         comboMultiplier = newComboStreak;
+        comboPercentage = (newComboStreak - 1) * 100; // For display: 100%, 200%, etc.
         finalScore = adjustedBaseScore * comboMultiplier;
       } else {
-        // Increment mode: +10%, +20%, +30%, etc. (streak - 1 because streak 2 = first combo = 10%)
-        comboPercentage = (newComboStreak - 1) * 10;
+        // Increment mode: +N%, +2N%, +3N%, etc. based on selected increment
+        const incrementStep = bonusType === "increment10" ? 10 : bonusType === "increment25" ? 25 : 50;
+        comboPercentage = (newComboStreak - 1) * incrementStep;
         comboMultiplier = newComboStreak; // Keep for display purposes
         finalScore = Math.round(
           adjustedBaseScore * (1 + comboPercentage / 100),
@@ -3287,7 +3315,7 @@ const WordGame = () => {
       let bonus = "";
       if (scoring.isCombo) {
         bonus =
-          comboBonusType === "multiplier"
+          comboBonusType === "multiplier" || comboBonusType === "increment100"
             ? ` x${scoring.comboMultiplier}`
             : ` +${scoring.comboPercentage}%`;
       }
@@ -3348,7 +3376,7 @@ const WordGame = () => {
 
     if (scoring.isCombo) {
       const comboDisplay =
-        comboBonusType === "multiplier"
+        comboBonusType === "multiplier" || comboBonusType === "increment100"
           ? `${scoring.comboMultiplier}x`
           : `+${scoring.comboPercentage}%`;
       scoreMessage += ` 🔥 ${comboDisplay} COMBO!`;
@@ -3873,10 +3901,7 @@ const WordGame = () => {
                     {/* Player Combo Streak */}
                     {playerComboStreak >= 2 && (
                       <span className="text-orange-500 font-bold text-sm animate-pulse">
-                        🔥
-                        {comboBonusType === "multiplier"
-                          ? `${playerComboStreak}x`
-                          : `+${(playerComboStreak - 1) * 10}%`}
+                        🔥{formatComboDisplay(playerComboStreak)}
                       </span>
                     )}
                   </div>
@@ -3903,10 +3928,7 @@ const WordGame = () => {
                     {/* Opponent Combo Streak */}
                     {opponentComboStreak >= 2 && (
                       <span className="text-orange-500 font-bold text-sm animate-pulse">
-                        🔥
-                        {comboBonusType === "multiplier"
-                          ? `${opponentComboStreak}x`
-                          : `+${(opponentComboStreak - 1) * 10}%`}
+                        🔥{formatComboDisplay(opponentComboStreak)}
                       </span>
                     )}
                     <span className="text-xl sm:text-2xl font-bold">
@@ -4021,8 +4043,10 @@ const WordGame = () => {
                           disabled={gameStarted}
                           title="Select combo bonus type"
                         >
-                          <option value="multiplier">Multiplier</option>
-                          <option value="increment">+10%</option>
+                          <option value="increment10">+10%</option>
+                          <option value="increment25">+25%</option>
+                          <option value="increment50">+50%</option>
+                          <option value="increment100">+100%</option>
                         </select>
                       </div>
                     </div>
@@ -4042,9 +4066,7 @@ const WordGame = () => {
                               </span>
                               <span className="font-semibold">
                                 {playerStats.highStreak > 0
-                                  ? comboBonusType === "multiplier"
-                                    ? `${playerStats.highStreak}x`
-                                    : `+${(playerStats.highStreak - 1) * 10}%`
+                                  ? formatComboDisplay(playerStats.highStreak)
                                   : "-"}
                               </span>
                             </div>
@@ -4075,9 +4097,7 @@ const WordGame = () => {
                               </span>
                               <span className="font-semibold">
                                 {opponentStats.highStreak > 0
-                                  ? comboBonusType === "multiplier"
-                                    ? `${opponentStats.highStreak}x`
-                                    : `+${(opponentStats.highStreak - 1) * 10}%`
+                                  ? formatComboDisplay(opponentStats.highStreak)
                                   : "-"}
                               </span>
                             </div>
@@ -4878,9 +4898,7 @@ const WordGame = () => {
                   <div className="flex justify-between">
                     <span>Best Streak:</span>
                     <span className="font-semibold">
-                      {comboBonusType === "multiplier"
-                        ? `${playerStats.highStreak}x`
-                        : `+${(playerStats.highStreak - 1) * 10}%`}
+                      {formatComboDisplay(playerStats.highStreak)}
                     </span>
                   </div>
                   <div className="flex justify-between">
@@ -4927,9 +4945,7 @@ const WordGame = () => {
                   <div className="flex justify-between">
                     <span>Best Streak:</span>
                     <span className="font-semibold">
-                      {comboBonusType === "multiplier"
-                        ? `${careerStats.bestComboStreak}x`
-                        : `+${(careerStats.bestComboStreak - 1) * 10}%`}
+                      {formatComboDisplay(careerStats.bestComboStreak)}
                     </span>
                   </div>
                   <div className="flex justify-between">
