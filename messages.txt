@@ -30,8 +30,8 @@ InvalidWordFormat = Invalid word: {word}
 NotEnoughSpace = Not enough space for all tiles.
 
 # Score Messages
-ScoreFormat = +{score} points! Word: {words}
-OpponentScoredFormat = Opponent scored {score} points.
+ScoreFormat = You scored {score} pts
+OpponentScoredFormat = Opponent scored {score} pts
 
 # Turn Messages
 OpponentPassed = Opponent passes
